@@ -14,14 +14,46 @@ import {
  * Shopee uses Vietnamese headers in their exports.
  */
 const COL = {
-  orderId: ["Mã đơn hàng", "Order ID", "order id"],
-  orderDate: ["Thời gian đặt hàng", "Order Creation Date", "Ngày đặt hàng"],
-  status: ["Trạng thái đơn hàng", "Order Status", "Status"],
-  productName: ["Tên sản phẩm", "Product Name", "product name"],
-  sku: ["SKU sản phẩm", "Product SKU", "SKU"],
-  variant: ["Phân loại hàng", "Variation", "Variation Name"],
-  quantity: ["Số lượng", "Quantity"],
-  revenue: ["Tổng giá trị đơn hàng", "Total Order Price", "Revenue", "Thành tiền"],
+  orderId: [
+    "Mã đơn hàng", "Order ID", "order id", "Mã Đơn Hàng",
+  ],
+  orderDate: [
+    "Ngày đặt hàng", "Thời gian đặt hàng", "Order Creation Date",
+    "Ngày Đặt Hàng", "Ngày tạo đơn", "Created Date",
+  ],
+  status: [
+    "Trạng Thái Đơn Hàng", "Trạng thái đơn hàng", "Order Status", "Status",
+    "Tình trạng đơn hàng",
+  ],
+  productName: [
+    "Tên sản phẩm", "Product Name", "product name", "Tên Sản Phẩm",
+  ],
+  sku: [
+    "SKU sản phẩm", "Product SKU", "SKU", "SKU Reference No.",
+    "Mã SKU", "SKU Reference",
+  ],
+  variant: [
+    "Tên phân loại hàng", "Phân loại hàng", "Variation", "Variation Name",
+    "Tên phân loại", "Phân Loại Hàng",
+  ],
+  quantity: [
+    "Số lượng", "Quantity", "Số Lượng",
+  ],
+  revenue: [
+    // Priority 1: Total order value — this is what we want
+    "Tổng giá trị đơn hàng (VND)", "Tổng giá trị đơn hàng",
+    "Tổng số tiền Người mua thanh toán", "Tổng số tiền người mua thanh toán",
+    // Priority 2: Other total amount columns
+    "Thành tiền", "Tổng số tiền", "Tổng số tiền (VND)",
+    "Người mua thanh toán",
+    // Priority 3: Unit price (fallback — will be multiplied by quantity if needed)
+    "Giá ưu đãi", "Đơn giá", "Đơn giá sản phẩm",
+    "Giá bán", "Giá sản phẩm",
+    // English variants
+    "Total Order Price", "Revenue", "Total Amount",
+    "Deal Price", "Product Price", "Total Product Price",
+    "Buyer Paid", "Buyer Total Payment",
+  ],
 };
 
 function findColumn(
@@ -83,16 +115,28 @@ export function parseOrderFile(buffer: Buffer): {
     return { orders, errors, period };
   }
 
-  // Header row is at index 0
-  const headers = (rows[0] as string[]).map((h) => String(h ?? ""));
-  const cols = resolveColumns(headers);
+  // Auto-detect header row — Shopee exports may have metadata rows before headers
+  let headerRowIndex = -1;
+  let headers: string[] = [];
+  let cols: ColIndexes = { orderId: -1, orderDate: -1, status: -1, productName: -1, sku: -1, variant: -1, quantity: -1, revenue: -1 };
 
-  if (cols.orderId === -1) {
-    errors.push({ row: 0, message: "Cannot find Order ID column in header row" });
+  for (let r = 0; r < Math.min(rows.length, 30); r++) {
+    const row = (rows[r] as string[]).map((h) => String(h ?? ""));
+    const testCols = resolveColumns(row);
+    if (testCols.orderId !== -1) {
+      headerRowIndex = r;
+      headers = row;
+      cols = testCols;
+      break;
+    }
+  }
+
+  if (headerRowIndex === -1 || cols.orderId === -1) {
+    errors.push({ row: 0, message: "Cannot find Order ID column in any row (scanned first 30 rows)" });
     return { orders, errors, period };
   }
 
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = headerRowIndex + 1; i < rows.length; i++) {
     const row = rows[i] as string[];
     const rowNum = i + 1;
 

@@ -127,7 +127,7 @@ export function parseBalanceFile(buffer: Buffer): {
         ? String(row[cols.id] ?? "").trim() || `tx-${detectedPeriod || period}-${i}`
         : `tx-${detectedPeriod || period}-${i}`;
 
-    const type = classifyTransaction(rawTypeRaw);
+    const type = classifyTransaction(rawTypeRaw, rawDetail);
 
     transactions.push({
       id: rowId,

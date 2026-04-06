@@ -101,34 +101,29 @@ export function detectPeriod(date: string): string {
  * Classifies a raw Shopee transaction type string into a normalized TransactionType.
  * Falls back to "other" for unknown types.
  */
-export function classifyTransaction(rawType: string): TransactionType {
-  if (!rawType) return "other";
-  const trimmed = rawType.trim();
-
-  // Exact match first
-  if (TRANSACTION_TYPE_MAP[trimmed]) {
-    return TRANSACTION_TYPE_MAP[trimmed];
-  }
-
-  // Case-insensitive match
-  const lower = trimmed.toLowerCase();
-  for (const [key, type] of Object.entries(TRANSACTION_TYPE_MAP)) {
-    if (key.toLowerCase() === lower) {
-      return type;
+export function classifyTransaction(rawType: string, detail: string = ""): TransactionType {
+  const evaluate = (str: string): TransactionType | null => {
+    if (!str) return null;
+    const trimmed = str.trim();
+    if (TRANSACTION_TYPE_MAP[trimmed]) return TRANSACTION_TYPE_MAP[trimmed];
+    
+    const lower = trimmed.toLowerCase();
+    for (const [key, type] of Object.entries(TRANSACTION_TYPE_MAP)) {
+      if (key.toLowerCase() === lower) return type;
     }
-  }
 
-  // Partial keyword matching
-  if (lower.includes("thanh toán") || lower.includes("payment")) return "order_payment";
-  if (lower.includes("hoàn tiền") || lower.includes("refund")) return "return_refund";
-  if (lower.includes("rút tiền") || lower.includes("withdrawal")) return "withdrawal";
-  if (lower.includes("hoa hồng") || lower.includes("commission")) return "commission_fee";
-  if (lower.includes("phí dịch vụ") || lower.includes("service fee")) return "service_fee";
-  if (lower.includes("voucher")) return "voucher";
-  if (lower.includes("vận chuyển") || lower.includes("shipping")) return "shipping_rebate";
-  if (lower.includes("điều chỉnh") || lower.includes("adjust")) return "adjustment";
+    if (lower.includes("thanh toán") || lower.includes("payment") || lower.includes("doanh thu từ đơn hàng")) return "order_payment";
+    if (lower.includes("hoàn tiền") || lower.includes("refund")) return "return_refund";
+    if (lower.includes("rút tiền") || lower.includes("withdrawal")) return "withdrawal";
+    if (lower.includes("hoa hồng") || lower.includes("commission")) return "commission_fee";
+    if (lower.includes("phí dịch vụ") || lower.includes("service fee") || lower.includes("quảng cáo") || lower.includes("ads")) return "service_fee";
+    if (lower.includes("voucher")) return "voucher";
+    if (lower.includes("vận chuyển") || lower.includes("shipping")) return "shipping_rebate";
+    if (lower.includes("điều chỉnh") || lower.includes("adjust")) return "adjustment";
+    return null;
+  };
 
-  return "other";
+  return evaluate(rawType) || evaluate(detail) || "other";
 }
 
 /**

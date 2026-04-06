@@ -46,7 +46,8 @@ router.post(
         return;
       }
 
-      const { orders, errors, period } = parseOrderFile(req.file.buffer);
+      const { period: customPeriod } = req.body;
+      const { orders, errors, period } = parseOrderFile(req.file.buffer, customPeriod);
       const db = getDb();
       const batchId = randomUUID();
       const now = new Date().toISOString();
@@ -127,7 +128,8 @@ router.post(
         return;
       }
 
-      const { transactions, errors, period } = parseBalanceFile(req.file.buffer);
+      const { period: customPeriod } = req.body;
+      const { transactions, errors, period } = parseBalanceFile(req.file.buffer, customPeriod);
       const db = getDb();
       const batchId = randomUUID();
       const now = new Date().toISOString();

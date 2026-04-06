@@ -30,6 +30,7 @@ interface DropzoneProps {
 function FileDropzone({ type, label, description, icon, onSuccess }: DropzoneProps) {
   const [dragOver, setDragOver] = useState(false)
   const [file, setFile] = useState<File | null>(null)
+  const [mode, setMode] = useState<'month' | 'day'>('month')
   const [period, setPeriod] = useState<string>(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -40,6 +41,16 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
+
+  // Update period format when mode changes
+  const switchMode = (newMode: 'month' | 'day') => {
+    if (newMode === mode) return
+    setMode(newMode)
+    const now = new Date()
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const day = `${month}-${String(now.getDate()).padStart(2, '0')}`
+    setPeriod(newMode === 'month' ? month : day)
+  }
 
   const validateFile = (f: File) => {
     if (!f.name.match(/\.(xlsx|xls)$/i)) {
@@ -217,10 +228,29 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
       {/* Period selector */}
       {!result && (
         <div style={{ marginBottom: 14 }}>
-          <label className="label">Kỳ báo cáo (YYYY-MM)</label>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 10, background: 'var(--bg-base)', padding: 3, borderRadius: 8, width: 'fit-content' }}>
+            <button 
+              className={`btn btn-sm ${mode === 'month' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ fontSize: 11, padding: '4px 10px' }}
+              onClick={() => switchMode('month')}
+            >
+              Cả tháng
+            </button>
+            <button 
+              className={`btn btn-sm ${mode === 'day' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ fontSize: 11, padding: '4px 10px' }}
+              onClick={() => switchMode('day')}
+            >
+              Một ngày cụ thể
+            </button>
+          </div>
+
+          <label className="label">
+            {mode === 'month' ? 'Chọn tháng báo cáo' : 'Chọn ngày báo cáo'}
+          </label>
           <input
             className="input"
-            type="month"
+            type={mode === 'month' ? 'month' : 'date'}
             value={period}
             onChange={e => setPeriod(e.target.value)}
             style={{ width: '100%' }}

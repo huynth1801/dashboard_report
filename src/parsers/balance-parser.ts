@@ -53,7 +53,7 @@ function resolveColumns(headers: string[]): ColIndexes {
  * Header row is at index 17 (Shopee special format with metadata rows).
  * Amount signs: positive = income, negative = expense.
  */
-export function parseBalanceFile(buffer: Buffer): {
+export function parseBalanceFile(buffer: Buffer, overridePeriod?: string): {
   transactions: ParsedTransaction[];
   errors: ParseError[];
   period: string;
@@ -68,7 +68,7 @@ export function parseBalanceFile(buffer: Buffer): {
 
   const transactions: ParsedTransaction[] = [];
   const errors: ParseError[] = [];
-  let period = "";
+  let period = overridePeriod || "";
 
   if (rows.length <= HEADER_ROW_INDEX) {
     errors.push({
@@ -137,7 +137,7 @@ export function parseBalanceFile(buffer: Buffer): {
       detail: rawDetail,
       orderId: rawOrderId,
       amount,
-      period: detectedPeriod || period,
+      period: overridePeriod || detectedPeriod || period,
     });
   }
 

@@ -37,20 +37,23 @@ router.post(
   "/orders",
   upload.single("file"),
   async (req: Request, res: Response) => {
-    if (!req.file) {
-      res.status(400).json({ error: "No file uploaded" });
-      return;
-    }
-
     try {
+      const userId = (req as any).userId;
+      if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+      if (!req.file) {
+        res.status(400).json({ error: "No file uploaded" });
+        return;
+      }
+
       const { orders, errors, period } = parseOrderFile(req.file.buffer);
       const db = getDb();
       const batchId = randomUUID();
       const now = new Date().toISOString();
 
       const sql = `
-        INSERT INTO orders (orderId, orderDate, status, isCompleted, productName, productShort, sku, variant, quantity, unitCount, revenue, period)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO orders (orderId, orderDate, status, isCompleted, productName, productShort, sku, variant, quantity, unitCount, revenue, period, userId)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(orderId) DO UPDATE SET
           orderDate = excluded.orderDate,
           status = excluded.status,
@@ -62,12 +65,13 @@ router.post(
           quantity = excluded.quantity,
           unitCount = excluded.unitCount,
           revenue = excluded.revenue,
-          period = excluded.period
+          period = excluded.period,
+          userId = excluded.userId
       `;
 
       const chunks = chunkArray(orders, 500);
 
-      // We use transactions via db.transaction() or db.batch(). @libsql/client provides .batch()
+      // We use batches via db.batch()
       for (const chunk of chunks) {
         const smts = chunk.map(order => ({
           sql,
@@ -83,15 +87,16 @@ router.post(
             order.quantity,
             order.unitCount,
             order.revenue,
-            order.period
+            order.period,
+            userId
           ]
         }));
         await db.batch(smts, "write");
       }
 
       await db.execute({
-        sql: `INSERT INTO upload_batches (id, type, period, rowsImported, createdAt) VALUES (?, ?, ?, ?, ?)`,
-        args: [batchId, "orders", period, orders.length, now]
+        sql: `INSERT INTO upload_batches (id, type, period, rowsImported, createdAt, userId) VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [batchId, "orders", period, orders.length, now, userId]
       });
 
       res.json({
@@ -113,20 +118,23 @@ router.post(
   "/balance",
   upload.single("file"),
   async (req: Request, res: Response) => {
-    if (!req.file) {
-      res.status(400).json({ error: "No file uploaded" });
-      return;
-    }
-
     try {
+      const userId = (req as any).userId;
+      if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+      if (!req.file) {
+        res.status(400).json({ error: "No file uploaded" });
+        return;
+      }
+
       const { transactions, errors, period } = parseBalanceFile(req.file.buffer);
       const db = getDb();
       const batchId = randomUUID();
       const now = new Date().toISOString();
 
       const sql = `
-        INSERT INTO transactions (id, date, type, typeRaw, detail, orderId, amount, period)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO transactions (id, date, type, typeRaw, detail, orderId, amount, period, userId)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           date = excluded.date,
           type = excluded.type,
@@ -134,7 +142,8 @@ router.post(
           detail = excluded.detail,
           orderId = excluded.orderId,
           amount = excluded.amount,
-          period = excluded.period
+          period = excluded.period,
+          userId = excluded.userId
       `;
 
       const chunks = chunkArray(transactions, 500);
@@ -150,15 +159,16 @@ router.post(
             tx.detail ?? null,
             tx.orderId ?? null,
             tx.amount,
-            tx.period
+            tx.period,
+            userId
           ]
         }));
         await db.batch(smts, "write");
       }
 
       await db.execute({
-        sql: `INSERT INTO upload_batches (id, type, period, rowsImported, createdAt) VALUES (?, ?, ?, ?, ?)`,
-        args: [batchId, "balance", period, transactions.length, now]
+        sql: `INSERT INTO upload_batches (id, type, period, rowsImported, createdAt, userId) VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [batchId, "balance", period, transactions.length, now, userId]
       });
 
       res.json({

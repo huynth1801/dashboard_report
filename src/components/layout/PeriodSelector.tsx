@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { usePeriod } from '../../lib/context'
+import { fetchWithAuth } from '../../lib/api'
 import { formatPeriod } from '../../lib/format'
 import { ChevronDown, Calendar, CheckSquare, Square } from 'lucide-react'
 
@@ -10,7 +11,7 @@ export function PeriodSelector() {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    fetch('/api/settings/periods')
+    fetchWithAuth('/api/settings/periods')
       .then(r => r.json())
       .then(data => {
         const list: string[] = data.periods ?? []

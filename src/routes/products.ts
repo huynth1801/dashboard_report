@@ -6,6 +6,12 @@ const router = Router();
 // GET /api/products?period=YYYY-MM&sortBy=units&limit=20
 router.get("/", async (req: Request, res: Response) => {
   try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
     const periodParam = String(req.query.period ?? "").trim();
     const sortBy = String(req.query.sortBy ?? "units").trim();
     const limit = Math.min(parseInt(String(req.query.limit ?? "20"), 10) || 20, 100);
@@ -41,11 +47,11 @@ router.get("/", async (req: Request, res: Response) => {
           SUM(revenue) AS totalRevenue,
           COUNT(DISTINCT orderId) AS totalOrders
          FROM orders
-         WHERE period IN (${placeholders}) AND isCompleted = 1
+         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1
          GROUP BY productShort
          ORDER BY ${sortField} DESC
          LIMIT ?`,
-      args: [...periods, limit]
+      args: [...periods, userId, limit]
     });
 
     const products = rs.rows.map((row: any) => ({
@@ -68,10 +74,10 @@ router.get("/", async (req: Request, res: Response) => {
             SUM(revenue) AS revenue,
             COUNT(DISTINCT orderId) AS orders
            FROM orders
-           WHERE period IN (${placeholders}) AND productShort = ? AND isCompleted = 1
+           WHERE period IN (${placeholders}) AND productShort = ? AND userId = ? AND isCompleted = 1
            GROUP BY variant, productName
            ORDER BY units DESC`,
-        args: [...periods, product.productShort]
+        args: [...periods, product.productShort, userId]
       });
 
       product.variants = vRs.rows.map((r: any) => ({
@@ -94,6 +100,12 @@ router.get("/", async (req: Request, res: Response) => {
 // GET /api/products/summary?periods=2026-01,2026-02,2026-03
 router.get("/summary", async (req: Request, res: Response) => {
   try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
     const periodsParam = String(req.query.periods ?? "").trim();
     if (!periodsParam) {
       res.status(400).json({ error: "periods query param required (comma-separated YYYY-MM)" });
@@ -119,13 +131,13 @@ router.get("/summary", async (req: Request, res: Response) => {
           SUM(revenue) AS revenue,
           COUNT(DISTINCT orderId) AS orders
          FROM orders
-         WHERE period IN (${placeholders}) AND isCompleted = 1
+         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1
          GROUP BY productShort, period
          ORDER BY productShort, period`,
-      args: periods
+      args: [...periods, userId]
     });
 
-    const allProducts = allProductsRs.rows.map(r => ({
+    const allProducts = allProductsRs.rows.map((r: any) => ({
       productShort: String(r.productShort),
       period: String(r.period),
       units: Number(r.units ?? 0),
@@ -143,13 +155,13 @@ router.get("/summary", async (req: Request, res: Response) => {
           SUM(revenue) AS totalRevenue,
           COUNT(DISTINCT orderId) AS totalOrders
          FROM orders
-         WHERE period IN (${placeholders}) AND isCompleted = 1
+         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1
          GROUP BY period
          ORDER BY period`,
-      args: periods
+      args: [...periods, userId]
     });
 
-    const periodTotals = periodTotalsRs.rows.map(r => ({
+    const periodTotals = periodTotalsRs.rows.map((r: any) => ({
       period: String(r.period),
       totalUnits: Number(r.totalUnits ?? 0),
       totalQuantity: Number(r.totalQuantity ?? 0),

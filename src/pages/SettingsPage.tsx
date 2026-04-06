@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useToast } from '../lib/context'
+import { fetchWithAuth } from '../lib/api'
 import { formatCurrency } from '../lib/format'
 import { Pencil, Check, X, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react'
 
@@ -137,7 +138,7 @@ export function SettingsPage() {
     setLoading(true)
     try {
       // Costs
-      const r1 = await fetch('/api/settings/costs')
+      const r1 = await fetchWithAuth('/api/settings/costs')
       const d1 = await r1.json()
       const costsMap: Record<string, ProductCost> = {}
       for (const c of d1.costs ?? []) {
@@ -145,7 +146,7 @@ export function SettingsPage() {
       }
 
       // Products from orders (unique productShort across all periods)
-      const r2 = await fetch('/api/products?period=__all__&limit=100').catch(() => null)
+      const r2 = await fetchWithAuth('/api/products?period=__all__&limit=100').catch(() => null)
       let productList: string[] = []
       if (r2 && r2.ok) {
         // fall back to just what we have in costs
@@ -166,12 +167,12 @@ export function SettingsPage() {
     setLoading(true)
     try {
       // Get periods first
-      const rp = await fetch('/api/settings/periods')
+      const rp = await fetchWithAuth('/api/settings/periods')
       const dp = await rp.json()
       const periods: string[] = dp.periods ?? []
 
       // Get costs
-      const rc = await fetch('/api/settings/costs')
+      const rc = await fetchWithAuth('/api/settings/costs')
       const dc = await rc.json()
       const costsMap: Record<string, number | null> = {}
       const notesMap: Record<string, string> = {}
@@ -183,7 +184,7 @@ export function SettingsPage() {
       // Aggregate unique products from all periods
       const productSet = new Set<string>()
       for (const p of periods.slice(0, 6)) {
-        const rr = await fetch(`/api/products?period=${p}&limit=100`)
+        const rr = await fetchWithAuth(`/api/products?period=${p}&limit=100`)
         if (rr.ok) {
           const dd = await rr.json()
           for (const prod of dd.products ?? []) productSet.add(prod.productShort)
@@ -208,7 +209,7 @@ export function SettingsPage() {
   useEffect(() => { fetchProductsFromOrders() }, [fetchProductsFromOrders])
 
   const handleSave = async (productShort: string, costPrice: number, note?: string) => {
-    const response = await fetch('/api/settings/costs', {
+    const response = await fetchWithAuth('/api/settings/costs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ productShort, costPrice, note }),

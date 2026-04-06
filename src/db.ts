@@ -54,9 +54,14 @@ export async function runMigrations(): Promise<void> {
       quantity INTEGER NOT NULL DEFAULT 0,
       unitCount INTEGER NOT NULL DEFAULT 1,
       revenue REAL NOT NULL DEFAULT 0,
-      period TEXT NOT NULL
+      period TEXT NOT NULL,
+      userId TEXT NOT NULL DEFAULT 'public'
     );
 
+    -- Upgrade existing tables if they don't have userId
+    -- Warning: SQLite ALTER TABLE ADD COLUMN is limited but it supports defaults
+    -- Note: In a production App, schema evolution is complex.
+    
     CREATE TABLE IF NOT EXISTS transactions (
       id TEXT PRIMARY KEY,
       date TEXT NOT NULL,
@@ -65,13 +70,15 @@ export async function runMigrations(): Promise<void> {
       detail TEXT,
       orderId TEXT,
       amount REAL NOT NULL DEFAULT 0,
-      period TEXT NOT NULL
+      period TEXT NOT NULL,
+      userId TEXT NOT NULL DEFAULT 'public'
     );
 
     CREATE TABLE IF NOT EXISTS product_costs (
       productShort TEXT PRIMARY KEY,
       costPrice REAL NOT NULL DEFAULT 0,
-      note TEXT
+      note TEXT,
+      userId TEXT NOT NULL DEFAULT 'public'
     );
 
     CREATE TABLE IF NOT EXISTS upload_batches (
@@ -79,7 +86,8 @@ export async function runMigrations(): Promise<void> {
       type TEXT NOT NULL,
       period TEXT NOT NULL,
       rowsImported INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL
+      createdAt TEXT NOT NULL,
+      userId TEXT NOT NULL DEFAULT 'public'
     );
 
     CREATE INDEX IF NOT EXISTS idx_orders_period ON orders(period);
@@ -87,4 +95,24 @@ export async function runMigrations(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_transactions_period ON transactions(period);
     CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
   `);
+
+  // Simple migration strategy: attempt to add userId column if missing
+  const alterQueries = [
+    `ALTER TABLE orders ADD COLUMN userId TEXT NOT NULL DEFAULT 'public';`,
+    `ALTER TABLE transactions ADD COLUMN userId TEXT NOT NULL DEFAULT 'public';`,
+    `ALTER TABLE upload_batches ADD COLUMN userId TEXT NOT NULL DEFAULT 'public';`,
+    `ALTER TABLE product_costs ADD COLUMN userId TEXT NOT NULL DEFAULT 'public';`
+  ];
+
+  for (const query of alterQueries) {
+    try {
+      await database.execute(query);
+    } catch (err: any) {
+      // Ignored if column already exists (duplicate column name)
+    }
+  }
+
+  // Create additional index for filtering performance
+  await database.execute(`CREATE INDEX IF NOT EXISTS idx_orders_userId ON orders(userId);`);
+  await database.execute(`CREATE INDEX IF NOT EXISTS idx_transactions_userId ON transactions(userId);`);
 }

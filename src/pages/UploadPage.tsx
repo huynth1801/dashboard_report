@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { useToast } from '../lib/context'
+import { fetchWithAuth } from '../lib/api'
 import { formatDate, formatPeriod } from '../lib/format'
 import { Upload, FileText, CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react'
 
@@ -82,7 +83,7 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
       formData.append('file', file)
       formData.append('period', period)
 
-      const response = await fetch(`/api/upload/${type}`, { method: 'POST', body: formData })
+      const response = await fetchWithAuth(`/api/upload/${type}`, { method: 'POST', body: formData })
       clearInterval(interval)
       setProgress(100)
 
@@ -267,7 +268,7 @@ export function UploadPage() {
     setHistoryLoading(true)
     try {
       // We'll infer from periods
-      const r = await fetch('/api/settings/periods')
+      const r = await fetchWithAuth('/api/settings/periods')
       const d = await r.json()
       // Build mock history entries from periods
       const periods: string[] = d.periods ?? []

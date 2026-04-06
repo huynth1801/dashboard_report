@@ -6,6 +6,12 @@ const router = Router();
 // GET /api/finance?period=YYYY-MM
 router.get("/", async (req: Request, res: Response) => {
   try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
     const periodParam = String(req.query.period ?? "").trim();
     if (!periodParam) {
       res.status(400).json({ error: "period query param required" });
@@ -25,9 +31,9 @@ router.get("/", async (req: Request, res: Response) => {
     const txRs = await db.execute({
       sql: `SELECT id, date, type, typeRaw, detail, orderId, amount
          FROM transactions
-         WHERE period IN (${placeholders})
+         WHERE period IN (${placeholders}) AND userId = ?
          ORDER BY date DESC`,
-      args: periods
+      args: [...periods, userId]
     });
 
     const transactions = txRs.rows.map((r: any) => ({
@@ -44,10 +50,10 @@ router.get("/", async (req: Request, res: Response) => {
     const summaryRs = await db.execute({
       sql: `SELECT type, SUM(amount) AS total, COUNT(*) AS count
          FROM transactions
-         WHERE period IN (${placeholders})
+         WHERE period IN (${placeholders}) AND userId = ?
          GROUP BY type
          ORDER BY ABS(SUM(amount)) DESC`,
-      args: periods
+      args: [...periods, userId]
     });
 
     const summary = summaryRs.rows.map((r: any) => ({
@@ -71,8 +77,8 @@ router.get("/", async (req: Request, res: Response) => {
               SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS income,
               SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) AS expense,
               SUM(amount) AS net
-             FROM transactions WHERE period = ?`,
-          args: [p]
+             FROM transactions WHERE period = ? AND userId = ?`,
+          args: [p, userId]
         });
         const row = rs.rows[0];
         comparison.push({

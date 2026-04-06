@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { usePeriod } from '../lib/context'
+import { fetchWithAuth } from '../lib/api'
 import { formatCurrency, formatNumber, formatPeriod } from '../lib/format'
 import { ChevronDown, ChevronRight, AlertTriangle, BarChart3, Table2 } from 'lucide-react'
 
@@ -70,7 +71,7 @@ function MonthlyView({
   const [costs, setCosts] = useState<Record<string, number>>({})
 
   const fetchCosts = useCallback(() => {
-    fetch('/api/settings/costs')
+    fetchWithAuth('/api/settings/costs')
       .then(r => r.json())
       .then(d => {
         const map: Record<string, number> = {}
@@ -83,7 +84,7 @@ function MonthlyView({
   const fetchProducts = useCallback(() => {
     if (!period) return
     setLoading(true)
-    fetch(`/api/products?period=${period}&sortBy=${sortBy}&limit=50`)
+    fetchWithAuth(`/api/products?period=${period}&sortBy=${sortBy}&limit=50`)
       .then(r => r.json())
       .then(d => setData(d))
       .catch(() => {})
@@ -270,7 +271,7 @@ function SummaryView({ periods: allPeriods }: { periods: string[] }) {
   const fetchSummary = useCallback(() => {
     if (selectedPeriods.length === 0) return
     setLoading(true)
-    fetch(`/api/products/summary?periods=${selectedPeriods.join(',')}`)
+    fetchWithAuth(`/api/products/summary?periods=${selectedPeriods.join(',')}`)
       .then(r => r.json())
       .then(d => setData(d))
       .catch(() => {})

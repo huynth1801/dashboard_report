@@ -6,6 +6,12 @@ const router = Router();
 // GET /api/dashboard?period=YYYY-MM or YYYY-MM,YYYY-MM
 router.get("/", async (req: Request, res: Response) => {
   try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
     const periodParam = String(req.query.period ?? "").trim();
     if (!periodParam) {
       res.status(400).json({ error: "period query param required" });
@@ -29,8 +35,8 @@ router.get("/", async (req: Request, res: Response) => {
           SUM(unitCount) AS totalUnits,
           SUM(quantity) AS totalQuantity
          FROM orders
-         WHERE period IN (${placeholders}) AND isCompleted = 1`,
-      args: periods,
+         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1`,
+      args: [...periods, userId],
     });
     
     const orderStatsRow = orderStatsRs.rows[0] as unknown as {
@@ -60,8 +66,8 @@ router.get("/", async (req: Request, res: Response) => {
           SUM(CASE WHEN type = 'return_refund' THEN amount ELSE 0 END) AS totalRefunds,
           SUM(CASE WHEN type = 'voucher' THEN amount ELSE 0 END) AS totalVouchers
          FROM transactions
-         WHERE period IN (${placeholders})`,
-      args: periods,
+         WHERE period IN (${placeholders}) AND userId = ?`,
+      args: [...periods, userId],
     });
     
     const txRow = txStatsRs.rows[0] as unknown as {
@@ -118,10 +124,10 @@ router.get("/", async (req: Request, res: Response) => {
           SUM(unitCount) AS units,
           SUM(quantity) AS quantity
          FROM orders
-         WHERE period IN (${placeholders}) AND isCompleted = 1
+         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1
          GROUP BY day
          ORDER BY day ASC`,
-      args: periods,
+      args: [...periods, userId],
     });
 
     const dailySeries = dailyRs.rows.map((r: any) => ({
@@ -150,8 +156,8 @@ router.get("/", async (req: Request, res: Response) => {
       });
       for (const p of prevPeriods) {
         const rs = await db.execute({
-          sql: `SELECT SUM(revenue) AS revenue FROM orders WHERE period = ? AND isCompleted = 1`,
-          args: [p]
+          sql: `SELECT SUM(revenue) AS revenue FROM orders WHERE period = ? AND userId = ? AND isCompleted = 1`,
+          args: [p, userId]
         });
         const rev = Number(rs.rows[0]?.revenue ?? 0);
         prevRevenue.push({ period: p, revenue: rev });

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { usePeriod } from '../lib/context'
+import { fetchWithAuth } from '../lib/api'
 import { formatCurrency, formatNumber, formatPercent, calcChange, formatShort } from '../lib/format'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -201,7 +202,7 @@ export function DashboardPage() {
     if (!period) return
     setLoading(true)
     setError(null)
-    fetch(`/api/dashboard?period=${period}`)
+    fetchWithAuth(`/api/dashboard?period=${period}`)
       .then(r => r.json())
       .then(d => {
         if (d.error) throw new Error(d.error)

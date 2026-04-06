@@ -4,11 +4,17 @@ import { getDb } from "../db.js";
 const router = Router();
 
 // GET /api/settings/costs
-router.get("/costs", async (_req: Request, res: Response) => {
+router.get("/costs", async (req: Request, res: Response) => {
   try {
+    const userId = (req as any).userId;
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
     const db = getDb();
-    const rs = await db.execute(`SELECT productShort, costPrice, note FROM product_costs ORDER BY productShort ASC`);
-    const costs = rs.rows.map(r => ({
+    const rs = await db.execute({
+      sql: `SELECT productShort, costPrice, note FROM product_costs WHERE userId = ? ORDER BY productShort ASC`,
+      args: [userId]
+    });
+    const costs = rs.rows.map((r: any) => ({
       productShort: String(r.productShort),
       costPrice: Number(r.costPrice ?? 0),
       note: String(r.note ?? "")
@@ -23,6 +29,9 @@ router.get("/costs", async (_req: Request, res: Response) => {
 // POST /api/settings/costs
 router.post("/costs", async (req: Request, res: Response) => {
   try {
+    const userId = (req as any).userId;
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
     const { productShort, costPrice, note } = req.body as {
       productShort?: string;
       costPrice?: number;
@@ -41,10 +50,10 @@ router.post("/costs", async (req: Request, res: Response) => {
 
     const db = getDb();
     await db.execute({
-      sql: `INSERT INTO product_costs (productShort, costPrice, note)
-         VALUES (?, ?, ?)
-         ON CONFLICT(productShort) DO UPDATE SET costPrice = excluded.costPrice, note = excluded.note`,
-      args: [productShort.trim(), costPrice, note ?? null]
+      sql: `INSERT INTO product_costs (productShort, costPrice, note, userId)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(productShort, userId) DO UPDATE SET costPrice = excluded.costPrice, note = excluded.note`,
+      args: [productShort.trim(), costPrice, note ?? null, userId]
     });
 
     res.json({ success: true, productShort: productShort.trim(), costPrice });
@@ -55,14 +64,20 @@ router.post("/costs", async (req: Request, res: Response) => {
 });
 
 // GET /api/settings/periods
-router.get("/periods", async (_req: Request, res: Response) => {
+router.get("/periods", async (req: Request, res: Response) => {
   try {
+    const userId = (req as any).userId;
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
     const db = getDb();
-    const rs = await db.execute(`SELECT DISTINCT period FROM orders
+    const rs = await db.execute({
+      sql: `SELECT DISTINCT period FROM orders WHERE userId = ?
          UNION
-         SELECT DISTINCT period FROM transactions
-         ORDER BY period DESC`);
-    const periods = rs.rows.map((p) => String(p.period));
+         SELECT DISTINCT period FROM transactions WHERE userId = ?
+         ORDER BY period DESC`,
+      args: [userId, userId]
+    });
+    const periods = rs.rows.map((p: any) => String(p.period));
     res.json({ periods });
   } catch (err) {
     console.error("Periods error:", err);

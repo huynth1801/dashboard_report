@@ -7,6 +7,7 @@ import dashboardRouter from "./routes/dashboard.js";
 import productsRouter from "./routes/products.js";
 import financeRouter from "./routes/finance.js";
 import settingsRouter from "./routes/settings.js";
+import { requireAuth } from "./middleware/auth.js";
 
 export function createApp() {
   const app = express();
@@ -17,11 +18,11 @@ export function createApp() {
   // Migrations will be run async in server.ts
 
   // Routes
-  app.use("/api/upload", uploadRouter);
-  app.use("/api/dashboard", dashboardRouter);
-  app.use("/api/products", productsRouter);
-  app.use("/api/finance", financeRouter);
-  app.use("/api/settings", settingsRouter);
+  app.use("/api/upload", requireAuth, uploadRouter);
+  app.use("/api/dashboard", requireAuth, dashboardRouter);
+  app.use("/api/products", requireAuth, productsRouter);
+  app.use("/api/finance", requireAuth, financeRouter);
+  app.use("/api/settings", requireAuth, settingsRouter);
 
   // Health check
   app.get("/api/health", (_req, res) => {

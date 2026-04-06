@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { usePeriod } from '../lib/context'
+import { fetchWithAuth } from '../lib/api'
 import { formatCurrency, formatDate, formatPeriod } from '../lib/format'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend
@@ -72,7 +73,7 @@ export function FinancePage() {
   const fetchData = useCallback(() => {
     if (!period) return
     setLoading(true)
-    fetch(`/api/finance?period=${period}`)
+    fetchWithAuth(`/api/finance?period=${period}`)
       .then(r => r.json())
       .then(d => { setData(d); setPage(1) })
       .catch(() => {})

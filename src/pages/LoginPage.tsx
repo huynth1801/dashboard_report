@@ -1,10 +1,12 @@
 import React from "react";
 import { GoogleLogin } from "@react-oauth/google";
 import { useAuth } from "../lib/AuthContext";
+import { useTheme } from "../lib/context";
 import { TrendingUp } from "lucide-react";
 
 export function LoginPage() {
   const { login } = useAuth();
+  const { theme } = useTheme();
 
   return (
     <div style={{
@@ -16,7 +18,7 @@ export function LoginPage() {
       background: 'var(--bg-base)'
     }}>
       <div className="card" style={{ maxWidth: 420, width: '100%', padding: '48px 32px', textAlign: 'center' }}>
-        
+
         {/* Logo */}
         <div style={{
           width: 56,
@@ -67,7 +69,7 @@ export function LoginPage() {
             }}
             useOneTap
             shape="rectangular"
-            theme="filled_black"
+            theme={theme === 'dark' ? 'filled_black' : 'outline'}
           />
         </div>
 

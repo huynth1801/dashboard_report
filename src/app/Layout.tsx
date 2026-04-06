@@ -2,6 +2,7 @@ import React from 'react'
 import { Sidebar } from '../components/layout/Sidebar'
 import { PeriodSelector } from '../components/layout/PeriodSelector'
 import { Outlet, useLocation } from 'react-router-dom'
+import { ThemeToggle } from '../components/layout/ThemeToggle'
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -26,7 +27,10 @@ export function Layout() {
           <div className="page-header-left">
             <h1 className="page-title">{title}</h1>
           </div>
-          {showPeriod && <PeriodSelector />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <ThemeToggle />
+            {showPeriod && <PeriodSelector />}
+          </div>
         </header>
         <main className="page-content">
           <Outlet />

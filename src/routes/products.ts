@@ -21,9 +21,9 @@ router.get("/", async (req: Request, res: Response) => {
       return;
     }
 
-    const periods = periodParam.split(",").map(p => p.trim()).filter(p => /^\d{4}-\d{2}(-\d{2})?$/.test(p));
+    const periods = periodParam.split(",").map(p => p.trim()).filter(p => /^\d{4}-\d{2}$/.test(p));
     if (periods.length === 0) {
-      res.status(400).json({ error: "period query param required (YYYY-MM or YYYY-MM-DD)" });
+      res.status(400).json({ error: "period query param required (YYYY-MM)" });
       return;
     }
 
@@ -41,16 +41,14 @@ router.get("/", async (req: Request, res: Response) => {
     // Group by productShort — include both unitCount and raw quantity
     const rs = await db.execute({
       sql: `SELECT
-          o.productShort,
-          SUM(o.unitCount) AS totalUnits,
-          SUM(o.quantity) AS totalQuantity,
-          SUM(o.revenue) AS totalRevenue,
-          COUNT(DISTINCT o.orderId) AS totalOrders,
-          c.costPrice
-         FROM orders o
-         LEFT JOIN product_costs c ON o.productShort = c.productShort AND o.userId = c.userId
-         WHERE o.period IN (${placeholders}) AND o.userId = ? AND o.isCompleted = 1
-         GROUP BY o.productShort
+          productShort,
+          SUM(unitCount) AS totalUnits,
+          SUM(quantity) AS totalQuantity,
+          SUM(revenue) AS totalRevenue,
+          COUNT(DISTINCT orderId) AS totalOrders
+         FROM orders
+         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1
+         GROUP BY productShort
          ORDER BY ${sortField} DESC
          LIMIT ?`,
       args: [...periods, userId, limit]
@@ -62,7 +60,6 @@ router.get("/", async (req: Request, res: Response) => {
       totalQuantity: Number(row.totalQuantity ?? 0),
       totalRevenue: Number(row.totalRevenue ?? 0),
       totalOrders: Number(row.totalOrders ?? 0),
-      costPrice: row.costPrice != null ? Number(row.costPrice) : undefined,
       variants: [] as any[]
     }));
 
@@ -115,9 +112,9 @@ router.get("/summary", async (req: Request, res: Response) => {
       return;
     }
 
-    const periods = periodsParam.split(",").map((p) => p.trim()).filter((p) => /^\d{4}-\d{2}(-\d{2})?$/.test(p));
+    const periods = periodsParam.split(",").map((p) => p.trim()).filter((p) => /^\d{4}-\d{2}$/.test(p));
     if (periods.length === 0) {
-      res.status(400).json({ error: "No valid periods provided (YYYY-MM or YYYY-MM-DD)" });
+      res.status(400).json({ error: "No valid periods provided" });
       return;
     }
 

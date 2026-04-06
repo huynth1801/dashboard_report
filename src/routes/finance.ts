@@ -18,9 +18,9 @@ router.get("/", async (req: Request, res: Response) => {
       return;
     }
 
-    const periods = periodParam.split(",").map(p => p.trim()).filter(p => /^\d{4}-\d{2}(-\d{2})?$/.test(p));
+    const periods = periodParam.split(",").map(p => p.trim()).filter(p => /^\d{4}-\d{2}$/.test(p));
     if (periods.length === 0) {
-      res.status(400).json({ error: "period query param required (YYYY-MM or YYYY-MM-DD)" });
+      res.status(400).json({ error: "period query param required (YYYY-MM)" });
       return;
     }
 

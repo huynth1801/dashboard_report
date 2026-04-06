@@ -18,9 +18,9 @@ router.get("/", async (req: Request, res: Response) => {
       return;
     }
 
-    const periods = periodParam.split(",").map(p => p.trim()).filter(p => /^\d{4}-\d{2}(-\d{2})?$/.test(p));
+    const periods = periodParam.split(",").map(p => p.trim()).filter(p => /^\d{4}-\d{2}$/.test(p));
     if (periods.length === 0) {
-      res.status(400).json({ error: "period query param required (YYYY-MM or YYYY-MM-DD)" });
+      res.status(400).json({ error: "period query param required (YYYY-MM)" });
       return;
     }
 
@@ -38,7 +38,7 @@ router.get("/", async (req: Request, res: Response) => {
          WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1`,
       args: [...periods, userId],
     });
-    
+
     const orderStatsRow = orderStatsRs.rows[0] as unknown as {
       totalOrders: number;
       totalRevenue: number | null;
@@ -69,7 +69,7 @@ router.get("/", async (req: Request, res: Response) => {
          WHERE period IN (${placeholders}) AND userId = ?`,
       args: [...periods, userId],
     });
-    
+
     const txRow = txStatsRs.rows[0] as unknown as {
       totalFees: number | null;
       shippingAdj: number | null;
@@ -84,34 +84,20 @@ router.get("/", async (req: Request, res: Response) => {
       totalVouchers: Number(txRow?.totalVouchers ?? 0),
     };
 
-    // Cost calculation — join with product_costs
-    const costRs = await db.execute({
-      sql: `SELECT
-          SUM(o.unitCount * IFNULL(c.costPrice, 0)) AS totalCost
-         FROM orders o
-         LEFT JOIN product_costs c ON o.productShort = c.productShort AND o.userId = c.userId
-         WHERE o.period IN (${placeholders}) AND o.userId = ? AND o.isCompleted = 1`,
-      args: [...periods, userId],
-    });
-    const totalCost = Number((costRs.rows[0] as any)?.totalCost ?? 0);
-
-    // Revenue calculation — matching user's Excel + product costs:
+    // Revenue calculation — matching user's Excel:
+    // DOANH THU RÒNG = Doanh thu đơn hàng - |Phí quảng cáo/Shopee| - |Điều chỉnh phí ship|
     const totalRevenue = orderStats.totalRevenue;
     const totalFees = Math.abs(txStats.totalFees);
     const shippingAdj = Math.abs(txStats.shippingAdj);
     const totalRefunds = Math.abs(txStats.totalRefunds);
     const totalVouchers = Math.abs(txStats.totalVouchers);
-    const netRevenue = totalRevenue - totalFees - shippingAdj - totalCost;
+    const netRevenue = totalRevenue - totalFees - shippingAdj;
 
     // Days in period
     let totalDays = 0;
     for (const p of periods) {
-      if (p.length === 7) { // YYYY-MM
-        const [y, m] = p.split("-").map(Number);
-        totalDays += new Date(y, m, 0).getDate();
-      } else { // YYYY-MM-DD
-        totalDays += 1;
-      }
+      const [y, m] = p.split("-").map(Number);
+      totalDays += new Date(y, m, 0).getDate();
     }
     const avgDailyRevenue = totalDays > 0 ? totalRevenue / totalDays : 0;
 
@@ -122,7 +108,6 @@ router.get("/", async (req: Request, res: Response) => {
       totalQuantity: orderStats.totalQuantity,
       avgOrderValue,
       netRevenue,
-      totalCost,
       totalFees,
       shippingAdj,
       totalRefunds,
@@ -158,8 +143,7 @@ router.get("/", async (req: Request, res: Response) => {
       { label: "Doanh thu đơn hàng", value: totalRevenue, type: "income" },
       { label: "Phí QC/Shopee", value: -totalFees, type: "expense" },
       { label: "Đ/c phí ship", value: -shippingAdj, type: "expense" },
-      { label: "Giá vốn sản phẩm", value: -totalCost, type: "expense" },
-      { label: "DOANH THU RÒNG (LỢI NHUẬN)", value: netRevenue, type: "total" },
+      { label: "DOANH THU RÒNG", value: netRevenue, type: "total" },
     ];
 
     // Previous period revenue for comparison

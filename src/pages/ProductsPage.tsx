@@ -55,8 +55,6 @@ const SORT_LABELS: Record<SortBy, string> = {
   orders: 'Số đơn',
 }
 
-import { useQuery } from '@tanstack/react-query'
-
 // ======================== Monthly View ========================
 function MonthlyView({
   period,
@@ -67,18 +65,33 @@ function MonthlyView({
   sortBy: SortBy
   setSortBy: (s: SortBy) => void
 }) {
+  const [data, setData] = useState<ProductsData | null>(null)
+  const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [costs, setCosts] = useState<Record<string, number>>({})
 
-  const { data: costsData } = useQuery({
-    queryKey: ['settings', 'costs'],
-    queryFn: () => fetchWithAuth('/api/settings/costs').then(r => r.json()),
-  })
+  const fetchCosts = useCallback(() => {
+    fetchWithAuth('/api/settings/costs')
+      .then(r => r.json())
+      .then(d => {
+        const map: Record<string, number> = {}
+        for (const c of d.costs ?? []) map[c.productShort] = c.costPrice
+        setCosts(map)
+      })
+      .catch(() => { })
+  }, [])
 
-  const { data: productsData, isLoading } = useQuery<ProductsData>({
-    queryKey: ['products', period, sortBy],
-    queryFn: () => fetchWithAuth(`/api/products?period=${period}&sortBy=${sortBy}&limit=50`).then(r => r.json()),
-    enabled: !!period,
-  })
+  const fetchProducts = useCallback(() => {
+    if (!period) return
+    setLoading(true)
+    fetchWithAuth(`/api/products?period=${period}&sortBy=${sortBy}&limit=50`)
+      .then(r => r.json())
+      .then(d => setData(d))
+      .catch(() => { })
+      .finally(() => setLoading(false))
+  }, [period, sortBy])
+
+  useEffect(() => { fetchProducts(); fetchCosts() }, [fetchProducts, fetchCosts])
 
   const toggle = (name: string) => {
     setExpanded(prev => {
@@ -88,12 +101,7 @@ function MonthlyView({
     })
   }
 
-  const products = productsData?.products ?? []
-  const costs: Record<string, number> = {}
-  if (costsData?.costs) {
-    for (const c of costsData.costs) costs[c.productShort] = c.costPrice
-  }
-
+  const products = data?.products ?? []
   const totalUnits = products.reduce((s, p) => s + p.totalUnits, 0)
   const totalRevenue = products.reduce((s, p) => s + p.totalRevenue, 0)
   const missingCost = products.filter(p => !costs[p.productShort])
@@ -139,24 +147,23 @@ function MonthlyView({
               <th className="right">Số lượng</th>
               <th className="right">Số đơn</th>
               <th className="right">Doanh thu</th>
-              <th className="right">Giá vốn</th>
-              <th className="right">Tổng giá vốn</th>
-              <th className="right">Lợi nhuận</th>
-              <th className="right">Biên</th>
+              <th className="right">Giá gốc/cái</th>
+              <th className="right">Giá TB/cái</th>
+              <th className="right" style={{ width: 80 }}>Trạng thái</th>
             </tr>
           </thead>
           <tbody>
-            {isLoading ? (
+            {loading ? (
               Array(6).fill(0).map((_, i) => (
                 <tr key={i}>
-                  {Array(10).fill(0).map((_, j) => (
+                  {Array(9).fill(0).map((_, j) => (
                     <td key={j}><div className="skeleton" style={{ height: 14, borderRadius: 4 }} /></td>
                   ))}
                 </tr>
               ))
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={10}>
+                <td colSpan={9}>
                   <div className="empty-state" style={{ padding: '40px 0' }}>
                     <div className="empty-icon">📦</div>
                     <p>Không có sản phẩm trong kỳ này</p>
@@ -166,12 +173,9 @@ function MonthlyView({
             ) : (
               products.map((product) => {
                 const isExp = expanded.has(product.productShort)
-                const cost = product.costPrice ?? costs[product.productShort]
+                const cost = costs[product.productShort]
+                const avgPrice = product.totalUnits > 0 ? product.totalRevenue / product.totalUnits : 0
                 const hasCost = cost !== undefined
-                
-                const totalCost = hasCost ? (product.totalUnits * cost) : 0
-                const profit = hasCost ? (product.totalRevenue - totalCost) : 0
-                const margin = (hasCost && product.totalRevenue > 0) ? (profit / product.totalRevenue) * 100 : 0
 
                 return (
                   <React.Fragment key={product.productShort}>
@@ -194,23 +198,18 @@ function MonthlyView({
                           : <span style={{ color: 'var(--warning)' }}>—</span>
                         }
                       </td>
-                      <td className="right muted">
-                        {hasCost ? formatCurrency(totalCost) : '—'}
-                      </td>
-                      <td className="right" style={{ color: profit >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
-                        {hasCost ? formatCurrency(profit) : <span className="muted">—</span>}
-                      </td>
+                      <td className="right muted">{formatCurrency(avgPrice)}</td>
                       <td className="right">
-                        {hasCost ? (
-                          <span className={`badge ${margin > 20 ? 'badge-success' : margin > 10 ? 'badge-primary' : 'badge-warning'}`} style={{ fontSize: 10 }}>
-                            {margin.toFixed(1)}%
-                          </span>
-                        ) : <span className="muted">—</span>}
+                        {hasCost
+                          ? <span className="badge badge-success">✓ Đủ</span>
+                          : <span className="badge badge-warning">⚠ Thiếu</span>
+                        }
                       </td>
                     </tr>
 
                     {/* Variants */}
                     {isExp && product.variants.map((v, vi) => {
+                      const variantAvg = v.units > 0 ? v.revenue / v.units : 0
                       return (
                         <tr key={vi} className="variant-row">
                           <td />
@@ -224,8 +223,7 @@ function MonthlyView({
                           <td className="right muted" style={{ fontSize: 13 }}>{formatNumber(v.orders)}</td>
                           <td className="right muted" style={{ fontSize: 13 }}>{formatCurrency(v.revenue)}</td>
                           <td />
-                          <td />
-                          <td />
+                          <td className="right muted" style={{ fontSize: 13 }}>{formatCurrency(variantAvg)}</td>
                           <td />
                         </tr>
                       )
@@ -239,7 +237,7 @@ function MonthlyView({
       </div>
 
       {/* Warning for missing costs */}
-      {missingCost.length > 0 && !isLoading && (
+      {missingCost.length > 0 && !loading && (
         <div className="alert alert-warning" style={{ marginTop: 16 }}>
           <AlertTriangle size={16} />
           <div className="alert-body">
@@ -259,6 +257,8 @@ function MonthlyView({
 
 // ======================== Summary View (Multi-month) ========================
 function SummaryView({ periods: allPeriods }: { periods: string[] }) {
+  const [data, setData] = useState<SummaryData | null>(null)
+  const [loading, setLoading] = useState(false)
   const [selectedPeriods, setSelectedPeriods] = useState<string[]>([])
 
   // Auto-select last 3 months when periods change
@@ -268,11 +268,17 @@ function SummaryView({ periods: allPeriods }: { periods: string[] }) {
     }
   }, [allPeriods])
 
-  const { data, isLoading } = useQuery<SummaryData>({
-    queryKey: ['products', 'summary', selectedPeriods],
-    queryFn: () => fetchWithAuth(`/api/products/summary?periods=${selectedPeriods.join(',')}`).then(r => r.json()),
-    enabled: selectedPeriods.length > 0,
-  })
+  const fetchSummary = useCallback(() => {
+    if (selectedPeriods.length === 0) return
+    setLoading(true)
+    fetchWithAuth(`/api/products/summary?periods=${selectedPeriods.join(',')}`)
+      .then(r => r.json())
+      .then(d => setData(d))
+      .catch(() => { })
+      .finally(() => setLoading(false))
+  }, [selectedPeriods])
+
+  useEffect(() => { fetchSummary() }, [fetchSummary])
 
   const togglePeriod = (p: string) => {
     setSelectedPeriods(prev =>
@@ -348,7 +354,7 @@ function SummaryView({ periods: allPeriods }: { periods: string[] }) {
                 </tr>
               </thead>
               <tbody>
-                {isLoading ? (
+                {loading ? (
                   Array(8).fill(0).map((_, i) => (
                     <tr key={i}>
                       {Array(sortedPeriods.length + 2).fill(0).map((_, j) => (

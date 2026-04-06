@@ -12,7 +12,7 @@ interface ToastCtx {
   addToast: (msg: string, type?: Toast['type']) => void
 }
 
-const ToastContext = createContext<ToastCtx>({ toasts: [], addToast: () => {} })
+const ToastContext = createContext<ToastCtx>({ toasts: [], addToast: () => { } })
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -50,9 +50,9 @@ interface PeriodCtx {
 
 const PeriodContext = createContext<PeriodCtx>({
   period: '',
-  setPeriod: () => {},
+  setPeriod: () => { },
   periods: [],
-  setPeriods: () => {},
+  setPeriods: () => { },
 })
 
 export function PeriodProvider({ children }: { children: React.ReactNode }) {
@@ -67,3 +67,46 @@ export function PeriodProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const usePeriod = () => useContext(PeriodContext)
+
+// ==================== THEME ====================
+export type Theme = 'dark' | 'light'
+
+interface ThemeCtx {
+  theme: Theme
+  toggleTheme: () => void
+}
+
+const ThemeContext = createContext<ThemeCtx>({ theme: 'dark', toggleTheme: () => {} })
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem('theme') as Theme
+    if (saved) return saved
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+  })
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => {
+      const next = prev === 'dark' ? 'light' : 'dark'
+      localStorage.setItem('theme', next)
+      return next
+    })
+  }, [])
+
+  React.useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [theme])
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  )
+}
+
+export const useTheme = () => useContext(ThemeContext)

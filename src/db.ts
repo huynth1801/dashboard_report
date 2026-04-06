@@ -116,30 +116,4 @@ export async function runMigrations(): Promise<void> {
   // Create additional index for filtering performance
   await database.execute(`CREATE INDEX IF NOT EXISTS idx_orders_userId ON orders(userId);`);
   await database.execute(`CREATE INDEX IF NOT EXISTS idx_transactions_userId ON transactions(userId);`);
-
-  // Migration for product_costs: check if it has the updated composite PK
-  try {
-    const tableInfo = await database.execute("PRAGMA table_info(product_costs)");
-    const pkColumns = (tableInfo.rows as any[]).filter(col => col.pk > 0);
-    
-    // If table exists but only has one PK column (productShort), migrate it
-    if (tableInfo.rows.length > 0 && pkColumns.length === 1 && pkColumns[0].name === 'productShort') {
-      console.log("Migrating product_costs table to composite primary key...");
-      await database.batch([
-        "ALTER TABLE product_costs RENAME TO product_costs_old",
-        `CREATE TABLE product_costs (
-          productShort TEXT NOT NULL,
-          costPrice REAL NOT NULL DEFAULT 0,
-          note TEXT,
-          userId TEXT NOT NULL DEFAULT 'public',
-          PRIMARY KEY (productShort, userId)
-        )`,
-        "INSERT INTO product_costs (productShort, costPrice, note, userId) SELECT productShort, costPrice, note, userId FROM product_costs_old",
-        "DROP TABLE product_costs_old"
-      ]);
-      console.log("Migration complete.");
-    }
-  } catch (err) {
-    console.warn("Migration for product_costs failed or not needed:", err);
-  }
 }

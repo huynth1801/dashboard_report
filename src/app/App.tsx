@@ -1,7 +1,7 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Layout } from './Layout'
-import { ToastProvider, PeriodProvider } from '../lib/context'
+import { ToastProvider, PeriodProvider, ThemeProvider } from '../lib/context'
 import { AuthProvider, useAuth } from '../lib/AuthContext'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { DashboardPage } from '../pages/DashboardPage'
@@ -10,8 +10,20 @@ import { FinancePage } from '../pages/FinancePage'
 import { UploadPage } from '../pages/UploadPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { LoginPage } from '../pages/LoginPage'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const GOOGLE_CLIENT_ID = (import.meta as any).env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID_HERE";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, isReady } = useAuth();
@@ -25,41 +37,30 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 30 * 60 * 1000,
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-})
-
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
         <AuthProvider>
-          <PeriodProvider>
-            <ToastProvider>
-              <BrowserRouter>
-                <Routes>
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                  <Route element={<AuthGuard><Layout /></AuthGuard>}>
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                    <Route path="/products" element={<ProductsPage />} />
-                    <Route path="/finance" element={<FinancePage />} />
-                    <Route path="/upload" element={<UploadPage />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                  </Route>
-                </Routes>
-              </BrowserRouter>
-            </ToastProvider>
-          </PeriodProvider>
+          <ThemeProvider>
+            <PeriodProvider>
+              <ToastProvider>
+                <BrowserRouter>
+                  <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    <Route element={<AuthGuard><Layout /></AuthGuard>}>
+                      <Route path="/dashboard" element={<DashboardPage />} />
+                      <Route path="/products" element={<ProductsPage />} />
+                      <Route path="/finance" element={<FinancePage />} />
+                      <Route path="/upload" element={<UploadPage />} />
+                      <Route path="/settings" element={<SettingsPage />} />
+                    </Route>
+                  </Routes>
+                </BrowserRouter>
+              </ToastProvider>
+            </PeriodProvider>
+          </ThemeProvider>
         </AuthProvider>
       </GoogleOAuthProvider>
     </QueryClientProvider>

@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { usePeriod } from '../lib/context'
 import { fetchWithAuth } from '../lib/api'
 import { formatCurrency, formatDate, formatPeriod } from '../lib/format'
@@ -65,22 +66,20 @@ const PAGE_SIZE = 20
 
 export function FinancePage() {
   const { period } = usePeriod()
-  const [data, setData] = useState<FinanceData | null>(null)
-  const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
   const [typeFilter, setTypeFilter] = useState<string>('all')
 
-  const fetchData = useCallback(() => {
-    if (!period) return
-    setLoading(true)
-    fetchWithAuth(`/api/finance?period=${period}`)
-      .then(r => r.json())
-      .then(d => { setData(d); setPage(1) })
-      .catch(() => { })
-      .finally(() => setLoading(false))
-  }, [period])
+  const { data, isPending: loading } = useQuery<FinanceData>({
+    queryKey: ['finance', period],
+    queryFn: async () => {
+      const r = await fetchWithAuth(`/api/finance?period=${period}`)
+      return r.json()
+    },
+    enabled: !!period,
+  })
 
-  useEffect(() => { fetchData() }, [fetchData])
+  // Reset page when period or filter changes
+  // We can do this in the event handlers or useMemo
 
   if (!period) {
     return (

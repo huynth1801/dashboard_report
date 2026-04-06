@@ -1,4 +1,5 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react'
+import React, { useState, useRef, useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../lib/context'
 import { fetchWithAuth } from '../lib/api'
 import { formatDate, formatPeriod } from '../lib/format'
@@ -40,6 +41,7 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
+  const queryClient = useQueryClient()
 
   const handleUpload = async () => {
     if (!file || !period) return
@@ -69,12 +71,14 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
       
       const typedData = data as UploadResult
       setResult(typedData)
-      onSuccess(typedData)
       
       addToast(
         `✅ Đã import ${typedData.rowsImported} ${type === 'orders' ? 'đơn hàng' : 'giao dịch'} — ${formatPeriod(typedData.period)}`,
         'success'
       )
+
+      // Invalidate ALL data queries
+      queryClient.invalidateQueries()
     } catch (err: any) {
       clearInterval(interval)
       setError(err.message ?? 'Upload thất bại')
@@ -253,28 +257,20 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
 }
 
 export function UploadPage() {
-  const [history, setHistory] = useState<UploadBatch[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
+  const { data: historyData, isPending: historyLoading, refetch: fetchHistory } = useQuery<UploadBatch[]>({
+    queryKey: ['settings', 'periods-history'],
+    queryFn: async () => {
+      const r = await fetchWithAuth('/api/settings/periods')
+      const data = await r.json()
+      const periods: string[] = data.periods ?? []
+      return periods.flatMap((p: string) => [
+        { id: `ord-${p}`, type: 'orders' as const, period: p, rowsImported: 0, createdAt: new Date().toISOString() },
+        { id: `bal-${p}`, type: 'balance' as const, period: p, rowsImported: 0, createdAt: new Date().toISOString() },
+      ])
+    }
+  })
 
-  const fetchHistory = useCallback(() => {
-    setHistoryLoading(true)
-    fetchWithAuth('/api/settings/periods')
-      .then(r => r.json())
-      .then(data => {
-        const periods: string[] = data.periods ?? []
-        const batches: UploadBatch[] = periods.flatMap((p: string) => [
-          { id: `ord-${p}`, type: 'orders' as const, period: p, rowsImported: 0, createdAt: new Date().toISOString() },
-          { id: `bal-${p}`, type: 'balance' as const, period: p, rowsImported: 0, createdAt: new Date().toISOString() },
-        ])
-        setHistory(batches)
-      })
-      .catch(() => {})
-      .finally(() => setHistoryLoading(false))
-  }, [])
-
-  useEffect(() => {
-    fetchHistory()
-  }, [fetchHistory])
+  const history = historyData ?? []
 
   return (
     <div>
@@ -285,14 +281,14 @@ export function UploadPage() {
           label="Báo cáo Đơn hàng"
           description="File xuất từ Shopee Seller → Đơn hàng → Tất cả đơn"
           icon="📦"
-          onSuccess={fetchHistory}
+          onSuccess={() => fetchHistory()}
         />
         <FileDropzone
           type="balance"
           label="Báo cáo Số dư"
           description="File xuất từ Shopee Seller → Tài chính → Số dư (header ở dòng 18)"
           icon="💰"
-          onSuccess={fetchHistory}
+          onSuccess={() => fetchHistory()}
         />
       </div>
 

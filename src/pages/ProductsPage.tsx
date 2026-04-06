@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useState, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { usePeriod } from '../lib/context'
 import { fetchWithAuth } from '../lib/api'
 import { formatCurrency, formatNumber, formatPeriod } from '../lib/format'
@@ -65,33 +66,30 @@ function MonthlyView({
   sortBy: SortBy
   setSortBy: (s: SortBy) => void
 }) {
-  const [data, setData] = useState<ProductsData | null>(null)
-  const [loading, setLoading] = useState(false)
+  const { data: costsData } = useQuery({
+    queryKey: ['settings', 'costs'],
+    queryFn: async () => {
+      const r = await fetchWithAuth('/api/settings/costs')
+      return r.json()
+    },
+  })
+
+  const costs = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const c of costsData?.costs ?? []) map[c.productShort] = c.costPrice
+    return map
+  }, [costsData])
+
+  const { data, isPending: loading } = useQuery<ProductsData>({
+    queryKey: ['products', period, sortBy],
+    queryFn: async () => {
+      const r = await fetchWithAuth(`/api/products?period=${period}&sortBy=${sortBy}&limit=50`)
+      return r.json()
+    },
+    enabled: !!period,
+  })
+
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [costs, setCosts] = useState<Record<string, number>>({})
-
-  const fetchCosts = useCallback(() => {
-    fetchWithAuth('/api/settings/costs')
-      .then(r => r.json())
-      .then(d => {
-        const map: Record<string, number> = {}
-        for (const c of d.costs ?? []) map[c.productShort] = c.costPrice
-        setCosts(map)
-      })
-      .catch(() => { })
-  }, [])
-
-  const fetchProducts = useCallback(() => {
-    if (!period) return
-    setLoading(true)
-    fetchWithAuth(`/api/products?period=${period}&sortBy=${sortBy}&limit=50`)
-      .then(r => r.json())
-      .then(d => setData(d))
-      .catch(() => { })
-      .finally(() => setLoading(false))
-  }, [period, sortBy])
-
-  useEffect(() => { fetchProducts(); fetchCosts() }, [fetchProducts, fetchCosts])
 
   const toggle = (name: string) => {
     setExpanded(prev => {
@@ -257,28 +255,17 @@ function MonthlyView({
 
 // ======================== Summary View (Multi-month) ========================
 function SummaryView({ periods: allPeriods }: { periods: string[] }) {
-  const [data, setData] = useState<SummaryData | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [selectedPeriods, setSelectedPeriods] = useState<string[]>([])
-
-  // Auto-select last 3 months when periods change
-  useEffect(() => {
-    if (allPeriods.length > 0 && selectedPeriods.length === 0) {
-      setSelectedPeriods(allPeriods.slice(0, Math.min(3, allPeriods.length)))
-    }
-  }, [allPeriods])
-
-  const fetchSummary = useCallback(() => {
-    if (selectedPeriods.length === 0) return
-    setLoading(true)
-    fetchWithAuth(`/api/products/summary?periods=${selectedPeriods.join(',')}`)
-      .then(r => r.json())
-      .then(d => setData(d))
-      .catch(() => { })
-      .finally(() => setLoading(false))
-  }, [selectedPeriods])
-
-  useEffect(() => { fetchSummary() }, [fetchSummary])
+  const [selectedPeriods, setSelectedPeriods] = useState<string[]>(() => 
+    allPeriods.slice(0, Math.min(3, allPeriods.length))
+  )
+  const { data, isPending: loading } = useQuery<SummaryData>({
+    queryKey: ['products', 'summary', selectedPeriods.join(',')],
+    queryFn: async () => {
+      const r = await fetchWithAuth(`/api/products/summary?periods=${selectedPeriods.join(',')}`)
+      return r.json()
+    },
+    enabled: selectedPeriods.length > 0,
+  })
 
   const togglePeriod = (p: string) => {
     setSelectedPeriods(prev =>

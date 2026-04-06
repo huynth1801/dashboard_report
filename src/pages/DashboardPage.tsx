@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { usePeriod } from '../lib/context'
 import { fetchWithAuth } from '../lib/api'
 import { formatCurrency, formatNumber, formatPercent, calcChange, formatShort } from '../lib/format'
@@ -194,25 +195,17 @@ function WaterfallChart({ data }: { data: DashboardData['waterfall'] }) {
 // ======================== Dashboard Page ========================
 export function DashboardPage() {
   const { period } = usePeriod()
-  const [data, setData] = useState<DashboardData | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  const fetchData = useCallback(() => {
-    if (!period) return
-    setLoading(true)
-    setError(null)
-    fetchWithAuth(`/api/dashboard?period=${period}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.error) throw new Error(d.error)
-        setData(d)
-      })
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [period])
-
-  useEffect(() => { fetchData() }, [fetchData])
+  const { data, isPending, error, refetch } = useQuery<DashboardData>({
+    queryKey: ['dashboard', period],
+    queryFn: async () => {
+      const r = await fetchWithAuth(`/api/dashboard?period=${period}`)
+      const d = await r.json()
+      if (d.error) throw new Error(d.error)
+      return d
+    },
+    enabled: !!period,
+  })
 
   if (!period) {
     return (
@@ -225,7 +218,7 @@ export function DashboardPage() {
     )
   }
 
-  if (loading) {
+  if (isPending) {
     return (
       <div>
         <div className="kpi-grid">
@@ -247,9 +240,9 @@ export function DashboardPage() {
       <div className="alert alert-danger">
         <div className="alert-body">
           <div className="alert-title">Lỗi tải dữ liệu</div>
-          <div className="alert-desc">{error}</div>
+          <div className="alert-desc">{(error as Error).message}</div>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={fetchData}>
+        <button className="btn btn-secondary btn-sm" onClick={() => refetch()}>
           <RefreshCw size={12} /> Thử lại
         </button>
       </div>

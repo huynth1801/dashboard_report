@@ -171,7 +171,7 @@ function WaterfallChart({ data }: { data: DashboardData['waterfall'] }) {
           <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false}
             tickFormatter={v => formatShort(v)} />
           <Tooltip
-            formatter={(v: number, name: string, props: any) => [
+            formatter={(v: any, name: any, props: any) => [
               formatCurrency(props.payload?.raw ?? 0), props.payload?.label
             ]}
             contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8 }}

@@ -119,7 +119,7 @@ export function FinancePage() {
                 <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false}
                   tickFormatter={v => `${(v / 1e6).toFixed(0)}M`} />
                 <Tooltip
-                  formatter={(v: number) => formatCurrency(v)}
+                  formatter={(v: any) => formatCurrency(v)}
                   contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8 }}
                   itemStyle={{ color: 'var(--text-primary)' }}
                 />

@@ -24,6 +24,8 @@ interface DashboardData {
     totalRefunds: number
     totalVouchers: number
     avgDailyRevenue: number
+    totalCost: number
+    netProfit: number
   }
   dailySeries: Array<{ day: string; orders: number; revenue: number; units: number; quantity: number }>
   waterfall: Array<{ label: string; value: number; type: string }>
@@ -294,6 +296,17 @@ export function DashboardPage() {
       value: formatCurrency(kpis.shippingAdj),
     },
     {
+      label: 'Tổng giá vốn',
+      value: formatCurrency(kpis.totalCost),
+      icon: <span style={{ fontSize: 16 }}>💰</span>,
+    },
+    {
+      label: 'LỢI NHUẬN THỰC',
+      value: formatCurrency(kpis.netProfit),
+      change: kpis.netRevenue > 0 ? (kpis.netProfit / kpis.netRevenue) : 0,
+      subValue: 'tỉ suất / doanh thu ròng',
+    },
+    {
       label: 'Doanh thu TB/ngày',
       value: formatCurrency(kpis.avgDailyRevenue),
     },
@@ -321,13 +334,14 @@ export function DashboardPage() {
             { label: 'Doanh thu đơn hàng', value: kpis.totalRevenue, color: '#10B981' },
             { label: 'Phí quảng cáo / Shopee', value: kpis.totalFees, color: '#EF4444', isExpense: true },
             { label: 'Điều chỉnh phí ship', value: kpis.shippingAdj, color: '#F59E0B', isExpense: true },
-            { label: 'DOANH THU RÒNG', value: kpis.netRevenue, color: '#EE4D2D' },
+            { label: 'Giá vốn hàng bán', value: kpis.totalCost, color: '#6366F1', isExpense: true },
+            { label: 'LỢI NHUẬN THỰC', value: kpis.netProfit, color: '#EE4D2D' },
           ].map((item, i) => {
             const pct = kpis.totalRevenue > 0 ? Math.abs(item.value) / kpis.totalRevenue * 100 : 0
             return (
               <div key={i} style={{ marginBottom: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: i === 3 ? 700 : 400 }}>{item.label}</span>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: i === 4 ? 700 : 400 }}>{item.label}</span>
                   <span style={{ fontSize: 12.5, fontWeight: 600, color: item.color }}>
                     {item.isExpense ? '-' : ''}{formatCurrency(Math.abs(item.value))}
                     {' '}

@@ -49,3 +49,5 @@ temp/
 
 # Build
 build/
+
+data/shopee.db*

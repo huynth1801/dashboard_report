@@ -63,24 +63,21 @@ const TYPE_BADGE: Record<string, string> = {
 
 const PAGE_SIZE = 20
 
+import { useQuery } from '@tanstack/react-query'
+
 export function FinancePage() {
   const { period } = usePeriod()
-  const [data, setData] = useState<FinanceData | null>(null)
-  const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
   const [typeFilter, setTypeFilter] = useState<string>('all')
 
-  const fetchData = useCallback(() => {
-    if (!period) return
-    setLoading(true)
-    fetchWithAuth(`/api/finance?period=${period}`)
-      .then(r => r.json())
-      .then(d => { setData(d); setPage(1) })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [period])
+  const { data, isLoading } = useQuery<FinanceData>({
+    queryKey: ['finance', period],
+    queryFn: () => fetchWithAuth(`/api/finance?period=${period}`).then(r => r.json()),
+    enabled: !!period,
+  })
 
-  useEffect(() => { fetchData() }, [fetchData])
+  // Reset page when period changes
+  useEffect(() => { setPage(1) }, [period])
 
   if (!period) {
     return (
@@ -134,7 +131,7 @@ export function FinancePage() {
           {/* Summary by type */}
           <div className="card" style={{ margin: 0 }}>
             <div className="card-title" style={{ marginBottom: 14 }}>Tổng hợp theo loại</div>
-            {loading ? (
+            {isLoading ? (
               Array(4).fill(0).map((_, i) => (
                 <div key={i} className="skeleton" style={{ height: 36, borderRadius: 6, marginBottom: 8 }} />
               ))
@@ -231,7 +228,7 @@ export function FinancePage() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
+            {isLoading ? (
               Array(10).fill(0).map((_, i) => (
                 <tr key={i}>
                   {Array(5).fill(0).map((_, j) => (

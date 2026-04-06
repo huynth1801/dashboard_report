@@ -25,28 +25,43 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 30 * 60 * 1000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
+
 export default function App() {
   return (
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <AuthProvider>
-        <PeriodProvider>
-          <ToastProvider>
-            <BrowserRouter>
-              <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route element={<AuthGuard><Layout /></AuthGuard>}>
-                  <Route path="/dashboard" element={<DashboardPage />} />
-                  <Route path="/products" element={<ProductsPage />} />
-                  <Route path="/finance" element={<FinancePage />} />
-                  <Route path="/upload" element={<UploadPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                </Route>
-              </Routes>
-            </BrowserRouter>
-          </ToastProvider>
-        </PeriodProvider>
-      </AuthProvider>
-    </GoogleOAuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+        <AuthProvider>
+          <PeriodProvider>
+            <ToastProvider>
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                  <Route element={<AuthGuard><Layout /></AuthGuard>}>
+                    <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="/products" element={<ProductsPage />} />
+                    <Route path="/finance" element={<FinancePage />} />
+                    <Route path="/upload" element={<UploadPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                  </Route>
+                </Routes>
+              </BrowserRouter>
+            </ToastProvider>
+          </PeriodProvider>
+        </AuthProvider>
+      </GoogleOAuthProvider>
+    </QueryClientProvider>
   )
 }

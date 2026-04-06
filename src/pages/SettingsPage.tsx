@@ -124,122 +124,105 @@ function CostRow({ product, isHighlighted, onSave }: CostRowProps) {
   )
 }
 
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+
+// ======================== Settings Page ========================
 export function SettingsPage() {
-  const [costs, setCosts] = useState<ProductCost[]>([])
-  const [products, setProducts] = useState<string[]>([])
-  const [loading, setLoading] = useState(false)
+  const queryClient = useQueryClient()
   const [filter, setFilter] = useState<'all' | 'missing' | 'done'>('all')
   const { addToast } = useToast()
 
-  // Get highlighted IDs from URL
+  // Highlighting logic
   const highlightIds = new URLSearchParams(window.location.search).get('highlight')?.split(',') ?? []
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    try {
-      // Costs
-      const r1 = await fetchWithAuth('/api/settings/costs')
-      const d1 = await r1.json()
-      const costsMap: Record<string, ProductCost> = {}
-      for (const c of d1.costs ?? []) {
-        costsMap[c.productShort] = c
-      }
+  // Queries
+  const { data: costsData, isLoading: isLoadingCosts } = useQuery({
+    queryKey: ['settings', 'costs'],
+    queryFn: () => fetchWithAuth('/api/settings/costs').then(r => r.json()),
+  })
 
-      // Products from orders (unique productShort across all periods)
-      const r2 = await fetchWithAuth('/api/products?period=__all__&limit=100').catch(() => null)
-      let productList: string[] = []
-      if (r2 && r2.ok) {
-        // fall back to just what we have in costs
-      }
+  const { data: periodsData } = useQuery({
+    queryKey: ['settings', 'periods'],
+    queryFn: () => fetchWithAuth('/api/settings/periods').then(r => r.json()),
+  })
 
-      // Merge: products from costs + any others
-      const allProducts = Object.keys(costsMap)
-      setProducts(allProducts)
-      setCosts(allProducts.map(p => costsMap[p] ?? { productShort: p, costPrice: null }))
-    } catch {
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const periods = periodsData?.periods ?? []
 
-  // Better: fetch unique products from orders using a known recent period
-  const fetchProductsFromOrders = useCallback(async () => {
-    setLoading(true)
-    try {
-      // Get periods first
-      const rp = await fetchWithAuth('/api/settings/periods')
-      const dp = await rp.json()
-      const periods: string[] = dp.periods ?? []
-
-      // Get costs
-      const rc = await fetchWithAuth('/api/settings/costs')
-      const dc = await rc.json()
-      const costsMap: Record<string, number | null> = {}
-      const notesMap: Record<string, string> = {}
-      for (const c of dc.costs ?? []) {
-        costsMap[c.productShort] = c.costPrice
-        notesMap[c.productShort] = c.note ?? ''
-      }
-
-      // Aggregate unique products from all periods
+  const { data: productsListData, isLoading: isLoadingProducts } = useQuery({
+    queryKey: ['products', 'list', periods.slice(0, 6)],
+    queryFn: async () => {
       const productSet = new Set<string>()
-      for (const p of periods.slice(0, 6)) {
-        const rr = await fetchWithAuth(`/api/products?period=${p}&limit=100`)
-        if (rr.ok) {
-          const dd = await rr.json()
-          for (const prod of dd.products ?? []) productSet.add(prod.productShort)
+      await Promise.all(periods.slice(0, 6).map(async (p: string) => {
+        const r = await fetchWithAuth(`/api/products?period=${p}&limit=100`)
+        if (r.ok) {
+          const d = await r.json()
+          for (const prod of (d.products ?? [])) productSet.add(prod.productShort)
         }
-      }
-      // Also add products from costs that might not be in orders anymore
-      for (const k of Object.keys(costsMap)) productSet.add(k)
+      }))
+      return Array.from(productSet).sort()
+    },
+    enabled: periods.length > 0,
+  })
 
-      const list = Array.from(productSet).sort()
-      setProducts(list)
-      setCosts(list.map(p => ({
-        productShort: p,
-        costPrice: costsMap[p] ?? null,
-        note: notesMap[p],
-      })))
-    } catch {
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  // Mutations
+  const mutation = useMutation({
+    mutationFn: ({ productShort, costPrice, note }: { productShort: string, costPrice: number, note?: string }) =>
+      fetchWithAuth('/api/settings/costs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productShort, costPrice, note }),
+      }).then(async r => {
+        const d = await r.json()
+        if (!r.ok) throw new Error(d.error || 'Lỗi lưu giá gốc')
+        return d
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'costs'] })
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      addToast(`Đã lưu giá gốc: ${variables.productShort}`, 'success')
+    },
+  })
 
-  useEffect(() => { fetchProductsFromOrders() }, [fetchProductsFromOrders])
+  const isLoading = isLoadingCosts || isLoadingProducts
 
   const handleSave = async (productShort: string, costPrice: number, note?: string) => {
-    const response = await fetchWithAuth('/api/settings/costs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productShort, costPrice, note }),
-    })
-    const data = await response.json()
-    if (!response.ok) throw new Error(data.error ?? 'Lỗi lưu giá gốc')
-
-    // Update local state
-    setCosts(prev => prev.map(c =>
-      c.productShort === productShort
-        ? { ...c, costPrice, note }
-        : c
-    ))
-    addToast(`Đã lưu giá gốc: ${productShort}`, 'success')
+    return mutation.mutateAsync({ productShort, costPrice, note })
   }
 
-  const withCost = costs.filter(c => c.costPrice != null)
-  const withoutCost = costs.filter(c => c.costPrice == null)
+  // Process data for display
+  const costsMap: Record<string, { costPrice: number | null, note: string }> = {}
+  if (costsData?.costs) {
+    for (const c of costsData.costs) {
+      costsMap[c.productShort] = { costPrice: c.costPrice, note: c.note ?? '' }
+    }
+  }
+
+  const allProductNames = Array.from(new Set([
+    ...(productsListData || []),
+    ...Object.keys(costsMap)
+  ])).sort()
+
+  const costsList: ProductCost[] = allProductNames.map(p => ({
+    productShort: p,
+    costPrice: costsMap[p]?.costPrice ?? null,
+    note: costsMap[p]?.note
+  }))
+
+  const withCost = costsList.filter(c => c.costPrice != null)
+  const withoutCost = costsList.filter(c => c.costPrice == null)
 
   const displayList = (() => {
     if (filter === 'missing') return withoutCost
     if (filter === 'done') return withCost
-    return costs
+    return costsList
   })()
 
   return (
     <div>
       {/* Summary bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <span className="badge badge-orange">{costs.length} sản phẩm</span>
+        <span className="badge badge-orange">{costsList.length} sản phẩm</span>
         <span className="badge badge-success">
           <CheckCircle size={10} style={{ marginRight: 3 }} />
           {withCost.length} đã nhập
@@ -257,7 +240,7 @@ export function SettingsPage() {
             <option value="missing">Chưa nhập ({withoutCost.length})</option>
             <option value="done">Đã nhập ({withCost.length})</option>
           </select>
-          <button className="btn btn-secondary btn-sm" onClick={fetchProductsFromOrders}>
+          <button className="btn btn-secondary btn-sm" onClick={() => queryClient.invalidateQueries()}>
             <RefreshCw size={13} /> Làm mới
           </button>
         </div>
@@ -274,7 +257,7 @@ export function SettingsPage() {
         </div>
       )}
 
-      {loading ? (
+      {isLoading ? (
         <div className="card">
           {Array(6).fill(0).map((_, i) => (
             <div key={i} className="cost-row">
@@ -283,7 +266,7 @@ export function SettingsPage() {
             </div>
           ))}
         </div>
-      ) : costs.length === 0 ? (
+      ) : costsList.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">📦</div>
           <p style={{ fontWeight: 600, marginBottom: 8 }}>Chưa có sản phẩm nào</p>

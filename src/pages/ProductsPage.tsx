@@ -55,6 +55,8 @@ const SORT_LABELS: Record<SortBy, string> = {
   orders: 'Số đơn',
 }
 
+import { useQuery } from '@tanstack/react-query'
+
 // ======================== Monthly View ========================
 function MonthlyView({
   period,
@@ -65,33 +67,18 @@ function MonthlyView({
   sortBy: SortBy
   setSortBy: (s: SortBy) => void
 }) {
-  const [data, setData] = useState<ProductsData | null>(null)
-  const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [costs, setCosts] = useState<Record<string, number>>({})
 
-  const fetchCosts = useCallback(() => {
-    fetchWithAuth('/api/settings/costs')
-      .then(r => r.json())
-      .then(d => {
-        const map: Record<string, number> = {}
-        for (const c of d.costs ?? []) map[c.productShort] = c.costPrice
-        setCosts(map)
-      })
-      .catch(() => {})
-  }, [])
+  const { data: costsData } = useQuery({
+    queryKey: ['settings', 'costs'],
+    queryFn: () => fetchWithAuth('/api/settings/costs').then(r => r.json()),
+  })
 
-  const fetchProducts = useCallback(() => {
-    if (!period) return
-    setLoading(true)
-    fetchWithAuth(`/api/products?period=${period}&sortBy=${sortBy}&limit=50`)
-      .then(r => r.json())
-      .then(d => setData(d))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [period, sortBy])
-
-  useEffect(() => { fetchProducts(); fetchCosts() }, [fetchProducts, fetchCosts])
+  const { data: productsData, isLoading } = useQuery<ProductsData>({
+    queryKey: ['products', period, sortBy],
+    queryFn: () => fetchWithAuth(`/api/products?period=${period}&sortBy=${sortBy}&limit=50`).then(r => r.json()),
+    enabled: !!period,
+  })
 
   const toggle = (name: string) => {
     setExpanded(prev => {
@@ -101,7 +88,12 @@ function MonthlyView({
     })
   }
 
-  const products = data?.products ?? []
+  const products = productsData?.products ?? []
+  const costs: Record<string, number> = {}
+  if (costsData?.costs) {
+    for (const c of costsData.costs) costs[c.productShort] = c.costPrice
+  }
+
   const totalUnits = products.reduce((s, p) => s + p.totalUnits, 0)
   const totalRevenue = products.reduce((s, p) => s + p.totalRevenue, 0)
   const missingCost = products.filter(p => !costs[p.productShort])
@@ -154,7 +146,7 @@ function MonthlyView({
             </tr>
           </thead>
           <tbody>
-            {loading ? (
+            {isLoading ? (
               Array(6).fill(0).map((_, i) => (
                 <tr key={i}>
                   {Array(10).fill(0).map((_, j) => (
@@ -247,7 +239,7 @@ function MonthlyView({
       </div>
 
       {/* Warning for missing costs */}
-      {missingCost.length > 0 && !loading && (
+      {missingCost.length > 0 && !isLoading && (
         <div className="alert alert-warning" style={{ marginTop: 16 }}>
           <AlertTriangle size={16} />
           <div className="alert-body">
@@ -267,8 +259,6 @@ function MonthlyView({
 
 // ======================== Summary View (Multi-month) ========================
 function SummaryView({ periods: allPeriods }: { periods: string[] }) {
-  const [data, setData] = useState<SummaryData | null>(null)
-  const [loading, setLoading] = useState(false)
   const [selectedPeriods, setSelectedPeriods] = useState<string[]>([])
 
   // Auto-select last 3 months when periods change
@@ -278,17 +268,11 @@ function SummaryView({ periods: allPeriods }: { periods: string[] }) {
     }
   }, [allPeriods])
 
-  const fetchSummary = useCallback(() => {
-    if (selectedPeriods.length === 0) return
-    setLoading(true)
-    fetchWithAuth(`/api/products/summary?periods=${selectedPeriods.join(',')}`)
-      .then(r => r.json())
-      .then(d => setData(d))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [selectedPeriods])
-
-  useEffect(() => { fetchSummary() }, [fetchSummary])
+  const { data, isLoading } = useQuery<SummaryData>({
+    queryKey: ['products', 'summary', selectedPeriods],
+    queryFn: () => fetchWithAuth(`/api/products/summary?periods=${selectedPeriods.join(',')}`).then(r => r.json()),
+    enabled: selectedPeriods.length > 0,
+  })
 
   const togglePeriod = (p: string) => {
     setSelectedPeriods(prev =>
@@ -364,7 +348,7 @@ function SummaryView({ periods: allPeriods }: { periods: string[] }) {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
+                {isLoading ? (
                   Array(8).fill(0).map((_, i) => (
                     <tr key={i}>
                       {Array(sortedPeriods.length + 2).fill(0).map((_, j) => (

@@ -130,3 +130,59 @@ export function classifyTransaction(rawType: string): TransactionType {
 
   return "other";
 }
+
+/**
+ * Parses a VND-formatted amount string.
+ * VND format uses dots as thousands separators: 7.594.267 = 7594267
+ * Handles: "7.594.267", "-1.344.600", "50.355", "344.263", "0", "-69.795"
+ * Also handles comma-separated formats and currency symbols.
+ */
+export function parseVndAmount(raw: string): number {
+  if (!raw) return 0;
+  let cleaned = raw.trim();
+
+  // Preserve negative sign
+  const isNegative = cleaned.startsWith("-");
+  cleaned = cleaned.replace(/^-/, "");
+
+  // Remove currency symbols and whitespace
+  cleaned = cleaned.replace(/[₫đ]/gi, "").replace(/VND/gi, "").trim();
+
+  // Count dots and commas to determine separator format
+  const dotCount = (cleaned.match(/\./g) || []).length;
+  const commaCount = (cleaned.match(/,/g) || []).length;
+
+  if (dotCount > 1) {
+    // Multiple dots → dots are thousands separators (VND: 7.594.267)
+    cleaned = cleaned.replace(/\./g, "");
+  } else if (dotCount === 1 && commaCount === 0) {
+    // Single dot: check if it's a thousands separator or decimal
+    const afterDot = cleaned.split(".")[1];
+    if (afterDot && afterDot.length === 3 && /^\d{1,3}\.\d{3}$/.test(cleaned)) {
+      // Pattern like "50.355" or "344.263" → thousands separator in VND
+      cleaned = cleaned.replace(".", "");
+    }
+    // Otherwise keep as decimal (rare for VND)
+  } else if (commaCount > 0 && dotCount === 0) {
+    // Commas as thousands separators (1,234,567)
+    cleaned = cleaned.replace(/,/g, "");
+  } else if (dotCount === 1 && commaCount >= 1) {
+    // Mixed: dots and commas — e.g., "1.234,56" (European) or "1,234.56" (US)
+    // Check which comes last to determine decimal separator
+    const lastDot = cleaned.lastIndexOf(".");
+    const lastComma = cleaned.lastIndexOf(",");
+    if (lastComma > lastDot) {
+      // Comma is decimal: "1.234,56"
+      cleaned = cleaned.replace(/\./g, "").replace(",", ".");
+    } else {
+      // Dot is decimal: "1,234.56"
+      cleaned = cleaned.replace(/,/g, "");
+    }
+  }
+
+  // Remove any remaining non-numeric chars except dot
+  cleaned = cleaned.replace(/[^0-9.]/g, "");
+
+  const result = parseFloat(cleaned) || 0;
+  return isNegative ? -result : result;
+}

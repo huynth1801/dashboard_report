@@ -19,11 +19,17 @@ router.get("/", (req: Request, res: Response) => {
       `SELECT
         COUNT(DISTINCT orderId) AS totalOrders,
         SUM(revenue) AS totalRevenue,
-        SUM(unitCount) AS totalUnits
+        SUM(unitCount) AS totalUnits,
+        SUM(quantity) AS totalQuantity
        FROM orders
        WHERE period = ? AND isCompleted = 1`
     )
-    .get(period) as { totalOrders: number; totalRevenue: number; totalUnits: number };
+    .get(period) as {
+    totalOrders: number;
+    totalRevenue: number;
+    totalUnits: number;
+    totalQuantity: number;
+  };
 
   const avgOrderValue =
     orderStats.totalOrders > 0
@@ -37,27 +43,32 @@ router.get("/", (req: Request, res: Response) => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
 
+  // Transaction stats — matching user's Excel breakdown
   const txStats = db
     .prepare(
       `SELECT
-        SUM(CASE WHEN type = 'return_refund' THEN ABS(amount) ELSE 0 END) AS totalRefunds,
-        SUM(CASE WHEN type IN ('service_fee','commission_fee') THEN ABS(amount) ELSE 0 END) AS totalFees,
-        SUM(CASE WHEN type = 'voucher' THEN ABS(amount) ELSE 0 END) AS totalVouchers,
-        SUM(CASE WHEN type = 'shipping_rebate' THEN amount ELSE 0 END) AS shippingRebate
+        SUM(CASE WHEN type IN ('service_fee','commission_fee') THEN amount ELSE 0 END) AS totalFees,
+        SUM(CASE WHEN type = 'shipping_rebate' THEN amount ELSE 0 END) AS shippingAdj,
+        SUM(CASE WHEN type = 'return_refund' THEN amount ELSE 0 END) AS totalRefunds,
+        SUM(CASE WHEN type = 'voucher' THEN amount ELSE 0 END) AS totalVouchers
        FROM transactions
        WHERE period = ?`
     )
     .get(period) as {
-    totalRefunds: number;
     totalFees: number;
+    shippingAdj: number;
+    totalRefunds: number;
     totalVouchers: number;
-    shippingRebate: number;
   };
 
+  // Revenue calculation — matching user's Excel:
+  // DOANH THU RÒNG = Doanh thu đơn hàng - |Phí quảng cáo/Shopee| - |Điều chỉnh phí ship|
   const totalRevenue = orderStats.totalRevenue ?? 0;
-  const totalRefunds = txStats?.totalRefunds ?? 0;
-  const totalFees = txStats?.totalFees ?? 0;
-  const netRevenue = totalRevenue - totalRefunds - totalFees;
+  const totalFees = Math.abs(txStats?.totalFees ?? 0);
+  const shippingAdj = Math.abs(txStats?.shippingAdj ?? 0);
+  const totalRefunds = Math.abs(txStats?.totalRefunds ?? 0);
+  const totalVouchers = Math.abs(txStats?.totalVouchers ?? 0);
+  const netRevenue = totalRevenue - totalFees - shippingAdj;
 
   // Days in period
   const daysInPeriod = new Date(y, m, 0).getDate();
@@ -67,12 +78,14 @@ router.get("/", (req: Request, res: Response) => {
     totalRevenue,
     totalOrders: orderStats.totalOrders ?? 0,
     totalUnits: orderStats.totalUnits ?? 0,
+    totalQuantity: orderStats.totalQuantity ?? 0,
     avgOrderValue,
     netRevenue,
-    totalRefunds,
     totalFees,
+    shippingAdj,
+    totalRefunds,
+    totalVouchers,
     avgDailyRevenue,
-    totalVouchers: txStats?.totalVouchers ?? 0,
   };
 
   // --- Daily series ---
@@ -82,22 +95,27 @@ router.get("/", (req: Request, res: Response) => {
         SUBSTR(orderDate, 1, 10) AS day,
         COUNT(DISTINCT orderId) AS orders,
         SUM(revenue) AS revenue,
-        SUM(unitCount) AS units
+        SUM(unitCount) AS units,
+        SUM(quantity) AS quantity
        FROM orders
        WHERE period = ? AND isCompleted = 1
        GROUP BY day
        ORDER BY day ASC`
     )
-    .all(period) as Array<{ day: string; orders: number; revenue: number; units: number }>;
+    .all(period) as Array<{
+    day: string;
+    orders: number;
+    revenue: number;
+    units: number;
+    quantity: number;
+  }>;
 
-  // --- Waterfall data (revenue breakdown) ---
+  // --- Waterfall data — matching user's Excel breakdown ---
   const waterfall = [
-    { label: "Doanh thu gộp", value: totalRevenue, type: "income" },
-    { label: "Hoàn tiền", value: -totalRefunds, type: "expense" },
-    { label: "Phí sàn", value: -totalFees, type: "expense" },
-    { label: "Voucher", value: -(txStats?.totalVouchers ?? 0), type: "expense" },
-    { label: "Hoàn phí vận chuyển", value: txStats?.shippingRebate ?? 0, type: "income" },
-    { label: "Doanh thu thuần", value: netRevenue, type: "total" },
+    { label: "Doanh thu đơn hàng", value: totalRevenue, type: "income" },
+    { label: "Phí QC/Shopee", value: -totalFees, type: "expense" },
+    { label: "Đ/c phí ship", value: -shippingAdj, type: "expense" },
+    { label: "DOANH THU RÒNG", value: netRevenue, type: "total" },
   ];
 
   // Previous period revenue for comparison
@@ -114,3 +132,4 @@ router.get("/", (req: Request, res: Response) => {
 });
 
 export default router;
+

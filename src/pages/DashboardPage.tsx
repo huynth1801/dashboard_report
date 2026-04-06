@@ -14,14 +14,16 @@ interface DashboardData {
     totalRevenue: number
     totalOrders: number
     totalUnits: number
+    totalQuantity: number
     avgOrderValue: number
     netRevenue: number
-    totalRefunds: number
     totalFees: number
-    avgDailyRevenue: number
+    shippingAdj: number
+    totalRefunds: number
     totalVouchers: number
+    avgDailyRevenue: number
   }
-  dailySeries: Array<{ day: string; orders: number; revenue: number; units: number }>
+  dailySeries: Array<{ day: string; orders: number; revenue: number; units: number; quantity: number }>
   waterfall: Array<{ label: string; value: number; type: string }>
   prevRevenue: Array<{ period: string; revenue: number }>
 }
@@ -160,8 +162,8 @@ function WaterfallChart({ data }: { data: DashboardData['waterfall'] }) {
 
   return (
     <div className="chart-container">
-      <div className="chart-title" style={{ marginBottom: 4 }}>Phân tích dòng tiền</div>
-      <div className="chart-subtitle">Từ doanh thu gộp → doanh thu thuần</div>
+      <div className="chart-title" style={{ marginBottom: 4 }}>Phân tích doanh thu ròng</div>
+      <div className="chart-subtitle">Doanh thu đơn hàng → DOANH THU RÒNG</div>
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={processed} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -259,20 +261,16 @@ export function DashboardPage() {
   const prevRev = prevRevenue?.[0]?.revenue ?? 0
   const revenueChange = calcChange(kpis.totalRevenue, prevRev)
 
-  // Ads spend from transactions
-  const adsFees = kpis.totalFees
-
   const kpiCards = [
     {
-      label: 'Doanh thu gộp',
+      label: 'Doanh thu đơn hàng',
       value: formatCurrency(kpis.totalRevenue),
       change: revenueChange,
       subValue: 'so với tháng trước',
     },
     {
-      label: 'Doanh thu ròng',
+      label: 'DOANH THU RÒNG',
       value: formatCurrency(kpis.netRevenue),
-      change: calcChange(kpis.netRevenue, prevRev * 0.85),
     },
     {
       label: 'Tổng đơn hoàn thành',
@@ -285,17 +283,21 @@ export function DashboardPage() {
       subValue: 'sản phẩm',
     },
     {
+      label: 'Số lượng bán ra',
+      value: formatNumber(kpis.totalQuantity),
+      subValue: 'sản phẩm (qty)',
+    },
+    {
       label: 'Giá trị đơn TB',
       value: formatCurrency(kpis.avgOrderValue),
     },
     {
-      label: 'Phí sàn & hoa hồng',
-      value: formatCurrency(adsFees),
-      change: adsFees > 0 ? -Math.abs(calcChange(adsFees, prevRev * 0.1) ?? 0) : null,
+      label: 'Phí QC/Shopee',
+      value: formatCurrency(kpis.totalFees),
     },
     {
-      label: 'Hoàn tiền',
-      value: formatCurrency(kpis.totalRefunds),
+      label: 'Điều chỉnh phí ship',
+      value: formatCurrency(kpis.shippingAdj),
     },
     {
       label: 'Doanh thu TB/ngày',
@@ -318,21 +320,20 @@ export function DashboardPage() {
       <div className="grid-2">
         {waterfall.length > 0 && <WaterfallChart data={waterfall} />}
 
-        {/* Cost Breakdown */}
+        {/* Cost Breakdown — matches user's Excel */}
         <div className="chart-container">
-          <div className="chart-title" style={{ marginBottom: 16 }}>Phân tích chi phí</div>
+          <div className="chart-title" style={{ marginBottom: 16 }}>Báo cáo Doanh thu Ròng</div>
           {[
-            { label: 'Doanh thu gộp', value: kpis.totalRevenue, color: '#10B981' },
-            { label: 'Phí sàn / Hoa hồng', value: kpis.totalFees, color: '#EF4444', isExpense: true },
-            { label: 'Hoàn tiền', value: kpis.totalRefunds, color: '#F59E0B', isExpense: true },
-            { label: 'Voucher', value: kpis.totalVouchers, color: '#8B5CF6', isExpense: true },
-            { label: 'Doanh thu ròng', value: kpis.netRevenue, color: '#EE4D2D' },
+            { label: 'Doanh thu đơn hàng', value: kpis.totalRevenue, color: '#10B981' },
+            { label: 'Phí quảng cáo / Shopee', value: kpis.totalFees, color: '#EF4444', isExpense: true },
+            { label: 'Điều chỉnh phí ship', value: kpis.shippingAdj, color: '#F59E0B', isExpense: true },
+            { label: 'DOANH THU RÒNG', value: kpis.netRevenue, color: '#EE4D2D' },
           ].map((item, i) => {
             const pct = kpis.totalRevenue > 0 ? Math.abs(item.value) / kpis.totalRevenue * 100 : 0
             return (
               <div key={i} style={{ marginBottom: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>{item.label}</span>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: i === 3 ? 700 : 400 }}>{item.label}</span>
                   <span style={{ fontSize: 12.5, fontWeight: 600, color: item.color }}>
                     {item.isExpense ? '-' : ''}{formatCurrency(Math.abs(item.value))}
                     {' '}

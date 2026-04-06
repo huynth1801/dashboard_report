@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx";
 import { randomUUID } from "crypto";
 import type { ParsedTransaction, ParseError } from "../types/transactions.js";
-import { classifyTransaction, detectPeriod } from "../utils/parser-utils.js";
+import { classifyTransaction, detectPeriod, parseVndAmount } from "../utils/parser-utils.js";
 
 /**
  * Shopee balance/finance export has metadata rows before the actual headers.
@@ -107,12 +107,9 @@ export function parseBalanceFile(buffer: Buffer): {
     const rawOrderId =
       cols.orderId !== -1 ? String(row[cols.orderId] ?? "").trim() : "";
 
-    // Parse amount — Shopee uses positive for income, negative for expense
     const rawAmount =
       cols.amount !== -1 ? String(row[cols.amount] ?? "0").trim() : "0";
-    // Remove thousand separators (commas or dots used as thousands) then parse
-    const cleanAmount = rawAmount.replace(/[^\d.\-]/g, "");
-    const amount = parseFloat(cleanAmount) || 0;
+    const amount = parseVndAmount(rawAmount);
 
     if (!rawDate) {
       errors.push({ row: rowNum, field: "date", message: "Missing date" });
@@ -124,11 +121,11 @@ export function parseBalanceFile(buffer: Buffer): {
       period = detectedPeriod;
     }
 
-    // Generate a stable ID from row index if no id column
+    // Generate a stable ID that includes period to prevent cross-month collision
     const rowId =
       cols.id !== -1
-        ? String(row[cols.id] ?? "").trim() || `tx-${i}`
-        : `tx-${i}`;
+        ? String(row[cols.id] ?? "").trim() || `tx-${detectedPeriod || period}-${i}`
+        : `tx-${detectedPeriod || period}-${i}`;
 
     const type = classifyTransaction(rawTypeRaw);
 

@@ -6,6 +6,7 @@ import {
   getUnitCount,
   shortenProductName,
   detectPeriod,
+  parseVndAmount,
 } from "../utils/parser-utils.js";
 
 /**
@@ -123,7 +124,7 @@ export function parseOrderFile(buffer: Buffer): {
 
     const rawRevenue =
       cols.revenue !== -1 ? String(row[cols.revenue] ?? "0").trim() : "0";
-    const revenue = parseFloat(rawRevenue.replace(/[^0-9.]/g, "")) || 0;
+    const revenue = parseVndAmount(rawRevenue);
 
     if (!rawProductName) {
       errors.push({ row: rowNum, field: "productName", message: "Missing product name", rawData: { orderId: rawOrderId } });

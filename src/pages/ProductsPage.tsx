@@ -147,23 +147,24 @@ function MonthlyView({
               <th className="right">Số lượng</th>
               <th className="right">Số đơn</th>
               <th className="right">Doanh thu</th>
-              <th className="right">Giá gốc/cái</th>
-              <th className="right">Giá TB/cái</th>
-              <th className="right" style={{ width: 80 }}>Trạng thái</th>
+              <th className="right">Giá vốn</th>
+              <th className="right">Tổng giá vốn</th>
+              <th className="right">Lợi nhuận</th>
+              <th className="right">Biên</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               Array(6).fill(0).map((_, i) => (
                 <tr key={i}>
-                  {Array(9).fill(0).map((_, j) => (
+                  {Array(10).fill(0).map((_, j) => (
                     <td key={j}><div className="skeleton" style={{ height: 14, borderRadius: 4 }} /></td>
                   ))}
                 </tr>
               ))
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={9}>
+                <td colSpan={10}>
                   <div className="empty-state" style={{ padding: '40px 0' }}>
                     <div className="empty-icon">📦</div>
                     <p>Không có sản phẩm trong kỳ này</p>
@@ -173,9 +174,12 @@ function MonthlyView({
             ) : (
               products.map((product) => {
                 const isExp = expanded.has(product.productShort)
-                const cost = costs[product.productShort]
-                const avgPrice = product.totalUnits > 0 ? product.totalRevenue / product.totalUnits : 0
+                const cost = product.costPrice ?? costs[product.productShort]
                 const hasCost = cost !== undefined
+                
+                const totalCost = hasCost ? (product.totalUnits * cost) : 0
+                const profit = hasCost ? (product.totalRevenue - totalCost) : 0
+                const margin = (hasCost && product.totalRevenue > 0) ? (profit / product.totalRevenue) * 100 : 0
 
                 return (
                   <React.Fragment key={product.productShort}>
@@ -198,18 +202,23 @@ function MonthlyView({
                           : <span style={{ color: 'var(--warning)' }}>—</span>
                         }
                       </td>
-                      <td className="right muted">{formatCurrency(avgPrice)}</td>
+                      <td className="right muted">
+                        {hasCost ? formatCurrency(totalCost) : '—'}
+                      </td>
+                      <td className="right" style={{ color: profit >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+                        {hasCost ? formatCurrency(profit) : <span className="muted">—</span>}
+                      </td>
                       <td className="right">
-                        {hasCost
-                          ? <span className="badge badge-success">✓ Đủ</span>
-                          : <span className="badge badge-warning">⚠ Thiếu</span>
-                        }
+                        {hasCost ? (
+                          <span className={`badge ${margin > 20 ? 'badge-success' : margin > 10 ? 'badge-primary' : 'badge-warning'}`} style={{ fontSize: 10 }}>
+                            {margin.toFixed(1)}%
+                          </span>
+                        ) : <span className="muted">—</span>}
                       </td>
                     </tr>
 
                     {/* Variants */}
                     {isExp && product.variants.map((v, vi) => {
-                      const variantAvg = v.units > 0 ? v.revenue / v.units : 0
                       return (
                         <tr key={vi} className="variant-row">
                           <td />
@@ -223,7 +232,8 @@ function MonthlyView({
                           <td className="right muted" style={{ fontSize: 13 }}>{formatNumber(v.orders)}</td>
                           <td className="right muted" style={{ fontSize: 13 }}>{formatCurrency(v.revenue)}</td>
                           <td />
-                          <td className="right muted" style={{ fontSize: 13 }}>{formatCurrency(variantAvg)}</td>
+                          <td />
+                          <td />
                           <td />
                         </tr>
                       )

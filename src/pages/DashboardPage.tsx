@@ -18,6 +18,7 @@ interface DashboardData {
     totalQuantity: number
     avgOrderValue: number
     netRevenue: number
+    totalCost: number
     totalFees: number
     shippingAdj: number
     totalRefunds: number
@@ -267,11 +268,16 @@ export function DashboardPage() {
       label: 'Doanh thu đơn hàng',
       value: formatCurrency(kpis.totalRevenue),
       change: revenueChange,
-      subValue: 'so với tháng trước',
+      subValue: 'so với kỳ trước',
     },
     {
-      label: 'DOANH THU RÒNG',
+      label: 'DOANH THU RÒNG (LỢI NHUẬN)',
       value: formatCurrency(kpis.netRevenue),
+    },
+    {
+      label: 'Giá vốn sản phẩm',
+      value: formatCurrency(kpis.totalCost),
+      subValue: 'tổng giá gốc sản phẩm',
     },
     {
       label: 'Tổng đơn hoàn thành',
@@ -282,15 +288,6 @@ export function DashboardPage() {
       label: 'Tổng cái bán ra',
       value: formatNumber(kpis.totalUnits),
       subValue: 'sản phẩm',
-    },
-    {
-      label: 'Số lượng bán ra',
-      value: formatNumber(kpis.totalQuantity),
-      subValue: 'sản phẩm (qty)',
-    },
-    {
-      label: 'Giá trị đơn TB',
-      value: formatCurrency(kpis.avgOrderValue),
     },
     {
       label: 'Phí QC/Shopee',
@@ -326,15 +323,16 @@ export function DashboardPage() {
           <div className="chart-title" style={{ marginBottom: 16 }}>Báo cáo Doanh thu Ròng</div>
           {[
             { label: 'Doanh thu đơn hàng', value: kpis.totalRevenue, color: '#10B981' },
+            { label: 'Giá vốn sản phẩm', value: kpis.totalCost, color: '#F59E0B', isExpense: true },
             { label: 'Phí quảng cáo / Shopee', value: kpis.totalFees, color: '#EF4444', isExpense: true },
-            { label: 'Điều chỉnh phí ship', value: kpis.shippingAdj, color: '#F59E0B', isExpense: true },
-            { label: 'DOANH THU RÒNG', value: kpis.netRevenue, color: '#EE4D2D' },
+            { label: 'Điều chỉnh phí ship', value: kpis.shippingAdj, color: '#8B5CF6', isExpense: true },
+            { label: 'LỢI NHUẬN RÒNG (TOTAL)', value: kpis.netRevenue, color: '#EE4D2D' },
           ].map((item, i) => {
             const pct = kpis.totalRevenue > 0 ? Math.abs(item.value) / kpis.totalRevenue * 100 : 0
             return (
               <div key={i} style={{ marginBottom: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: i === 3 ? 700 : 400 }}>{item.label}</span>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontWeight: i === 4 ? 700 : 400 }}>{item.label}</span>
                   <span style={{ fontSize: 12.5, fontWeight: 600, color: item.color }}>
                     {item.isExpense ? '-' : ''}{formatCurrency(Math.abs(item.value))}
                     {' '}

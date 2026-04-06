@@ -14,8 +14,7 @@ export function createApp() {
   app.use(cors());
   app.use(express.json());
 
-  // Run migrations on startup
-  runMigrations();
+  // Migrations will be run async in server.ts
 
   // Routes
   app.use("/api/upload", uploadRouter);

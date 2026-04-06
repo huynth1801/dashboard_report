@@ -24,6 +24,14 @@ const upload = multer({
   },
 });
 
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+}
+
 // POST /api/upload/orders
 router.post(
   "/orders",
@@ -40,9 +48,9 @@ router.post(
       const batchId = randomUUID();
       const now = new Date().toISOString();
 
-      const upsertOrder = db.prepare(`
+      const sql = `
         INSERT INTO orders (orderId, orderDate, status, isCompleted, productName, productShort, sku, variant, quantity, unitCount, revenue, period)
-        VALUES (@orderId, @orderDate, @status, @isCompleted, @productName, @productShort, @sku, @variant, @quantity, @unitCount, @revenue, @period)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(orderId) DO UPDATE SET
           orderDate = excluded.orderDate,
           status = excluded.status,
@@ -55,24 +63,36 @@ router.post(
           unitCount = excluded.unitCount,
           revenue = excluded.revenue,
           period = excluded.period
-      `);
+      `;
 
-      const insertBatch = db.prepare(`
-        INSERT INTO upload_batches (id, type, period, rowsImported, createdAt)
-        VALUES (?, ?, ?, ?, ?)
-      `);
+      const chunks = chunkArray(orders, 500);
 
-      const runTransaction = db.transaction(() => {
-        for (const order of orders) {
-          upsertOrder.run({
-            ...order,
-            isCompleted: order.isCompleted ? 1 : 0,
-          });
-        }
-        insertBatch.run(batchId, "orders", period, orders.length, now);
+      // We use transactions via db.transaction() or db.batch(). @libsql/client provides .batch()
+      for (const chunk of chunks) {
+        const smts = chunk.map(order => ({
+          sql,
+          args: [
+            order.orderId,
+            order.orderDate,
+            order.status,
+            order.isCompleted ? 1 : 0,
+            order.productName,
+            order.productShort,
+            order.sku ?? null,
+            order.variant,
+            order.quantity,
+            order.unitCount,
+            order.revenue,
+            order.period
+          ]
+        }));
+        await db.batch(smts, "write");
+      }
+
+      await db.execute({
+        sql: `INSERT INTO upload_batches (id, type, period, rowsImported, createdAt) VALUES (?, ?, ?, ?, ?)`,
+        args: [batchId, "orders", period, orders.length, now]
       });
-
-      runTransaction();
 
       res.json({
         batchId,
@@ -81,6 +101,7 @@ router.post(
         errors: errors.length > 0 ? errors : undefined,
       });
     } catch (err) {
+      console.error("Upload error:", err);
       const message = err instanceof Error ? err.message : "Parse error";
       res.status(422).json({ error: message });
     }
@@ -103,9 +124,9 @@ router.post(
       const batchId = randomUUID();
       const now = new Date().toISOString();
 
-      const upsertTx = db.prepare(`
+      const sql = `
         INSERT INTO transactions (id, date, type, typeRaw, detail, orderId, amount, period)
-        VALUES (@id, @date, @type, @typeRaw, @detail, @orderId, @amount, @period)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           date = excluded.date,
           type = excluded.type,
@@ -114,21 +135,31 @@ router.post(
           orderId = excluded.orderId,
           amount = excluded.amount,
           period = excluded.period
-      `);
+      `;
 
-      const insertBatch = db.prepare(`
-        INSERT INTO upload_batches (id, type, period, rowsImported, createdAt)
-        VALUES (?, ?, ?, ?, ?)
-      `);
+      const chunks = chunkArray(transactions, 500);
 
-      const runTransaction = db.transaction(() => {
-        for (const tx of transactions) {
-          upsertTx.run(tx);
-        }
-        insertBatch.run(batchId, "balance", period, transactions.length, now);
+      for (const chunk of chunks) {
+        const smts = chunk.map(tx => ({
+          sql,
+          args: [
+            tx.id,
+            tx.date,
+            tx.type,
+            tx.typeRaw,
+            tx.detail ?? null,
+            tx.orderId ?? null,
+            tx.amount,
+            tx.period
+          ]
+        }));
+        await db.batch(smts, "write");
+      }
+
+      await db.execute({
+        sql: `INSERT INTO upload_batches (id, type, period, rowsImported, createdAt) VALUES (?, ?, ?, ?, ?)`,
+        args: [batchId, "balance", period, transactions.length, now]
       });
-
-      runTransaction();
 
       res.json({
         batchId,
@@ -137,6 +168,7 @@ router.post(
         errors: errors.length > 0 ? errors : undefined,
       });
     } catch (err) {
+      console.error("Upload error:", err);
       const message = err instanceof Error ? err.message : "Parse error";
       res.status(422).json({ error: message });
     }

@@ -1,24 +1,35 @@
-import Database from "better-sqlite3";
+import { createClient, Client } from "@libsql/client";
 import { mkdirSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DB_PATH = path.join(__dirname, "..", "data", "shopee.db");
 
-let _db: Database.Database | null = null;
+let _db: Client | null = null;
 
-export function getDb(): Database.Database {
+export function getDb(): Client {
   if (!_db) {
-    mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    _db = new Database(DB_PATH);
-    _db.pragma("journal_mode = WAL");
+    const url = process.env.TURSO_URL;
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+
+    if (url) {
+      // Connect to remote Turso Database
+      _db = createClient({ url, authToken });
+    } else {
+      // Fallback to local SQLite file
+      mkdirSync(path.dirname(DB_PATH), { recursive: true });
+      _db = createClient({ url: `file:${DB_PATH}` });
+    }
   }
   return _db;
 }
 
 /** For testing only — replaces the module-level DB singleton. */
-export function setTestDb(db: Database.Database): void {
+export function setTestDb(db: Client): void {
   _db = db;
 }
 
@@ -27,11 +38,10 @@ export function resetTestDb(): void {
   _db = null;
 }
 
-export function runMigrations(): void {
-  mkdirSync(path.dirname(DB_PATH), { recursive: true });
+export async function runMigrations(): Promise<void> {
   const database = getDb();
 
-  database.exec(`
+  await database.executeMultiple(`
     CREATE TABLE IF NOT EXISTS orders (
       orderId TEXT PRIMARY KEY,
       orderDate TEXT NOT NULL,

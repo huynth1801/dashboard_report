@@ -24,8 +24,14 @@ router.get("/", async (req: Request, res: Response) => {
       return;
     }
 
+    const shopId = String(req.query.shopId ?? "").trim() || null;
+
     const db = getDb();
     const placeholders = periods.map(() => "?").join(",");
+    const shopFilter = shopId ? " AND o.shopId = ?" : "";
+    const shopArgs = shopId ? [shopId] : [];
+    const txShopFilter = shopId ? " AND shopId = ?" : "";
+    const txShopArgs = shopId ? [shopId] : [];
 
     // --- KPIs ---
     const orderStatsRs = await db.execute({
@@ -36,9 +42,9 @@ router.get("/", async (req: Request, res: Response) => {
           SUM(o.quantity) AS totalQuantity,
           SUM(o.unitCount * IFNULL(c.costPrice, 0)) AS totalCost
          FROM orders o
-         LEFT JOIN settings_costs c ON o.productShort = c.productShort AND o.userId = c.userId
-         WHERE o.period IN (${placeholders}) AND o.userId = ? AND o.isCompleted = 1`,
-      args: [...periods, userId],
+         LEFT JOIN product_costs c ON o.productShort = c.productShort AND o.userId = c.userId
+         WHERE o.period IN (${placeholders}) AND o.userId = ? AND o.isCompleted = 1${shopFilter}`,
+      args: [...periods, userId, ...shopArgs],
     });
 
     const orderStatsRow = orderStatsRs.rows[0] as unknown as {
@@ -70,8 +76,8 @@ router.get("/", async (req: Request, res: Response) => {
           SUM(CASE WHEN type = 'return_refund' THEN amount ELSE 0 END) AS totalRefunds,
           SUM(CASE WHEN type = 'voucher' THEN amount ELSE 0 END) AS totalVouchers
          FROM transactions
-         WHERE period IN (${placeholders}) AND userId = ?`,
-      args: [...periods, userId],
+         WHERE period IN (${placeholders}) AND userId = ?${txShopFilter}`,
+      args: [...periods, userId, ...txShopArgs],
     });
 
     const txRow = txStatsRs.rows[0] as unknown as {
@@ -124,6 +130,7 @@ router.get("/", async (req: Request, res: Response) => {
     };
 
     // --- Daily series ---
+    const dailyShopFilter = shopId ? " AND shopId = ?" : "";
     const dailyRs = await db.execute({
       sql: `SELECT
           SUBSTR(orderDate, 1, 10) AS day,
@@ -132,10 +139,10 @@ router.get("/", async (req: Request, res: Response) => {
           SUM(unitCount) AS units,
           SUM(quantity) AS quantity
          FROM orders
-         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1
+         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1${dailyShopFilter}
          GROUP BY day
          ORDER BY day ASC`,
-      args: [...periods, userId],
+      args: [...periods, userId, ...shopArgs],
     });
 
     const dailySeries = dailyRs.rows.map((r: any) => ({
@@ -166,8 +173,8 @@ router.get("/", async (req: Request, res: Response) => {
       });
       for (const p of prevPeriods) {
         const rs = await db.execute({
-          sql: `SELECT SUM(revenue) AS revenue FROM orders WHERE period = ? AND userId = ? AND isCompleted = 1`,
-          args: [p, userId]
+          sql: `SELECT SUM(revenue) AS revenue FROM orders WHERE period = ? AND userId = ? AND isCompleted = 1${dailyShopFilter}`,
+          args: [p, userId, ...shopArgs]
         });
         const rev = Number(rs.rows[0]?.revenue ?? 0);
         prevRevenue.push({ period: p, revenue: rev });

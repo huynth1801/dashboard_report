@@ -68,6 +68,40 @@ export function PeriodProvider({ children }: { children: React.ReactNode }) {
 
 export const usePeriod = () => useContext(PeriodContext)
 
+// ==================== SHOP ====================
+export interface Shop {
+  id: string
+  name: string
+  createdAt: string
+}
+
+interface ShopCtx {
+  shopId: string | null      // null = tất cả shop
+  setShopId: (id: string | null) => void
+  shops: Shop[]
+  setShops: (shops: Shop[]) => void
+}
+
+const ShopContext = createContext<ShopCtx>({
+  shopId: null,
+  setShopId: () => {},
+  shops: [],
+  setShops: () => {},
+})
+
+export function ShopProvider({ children }: { children: React.ReactNode }) {
+  const [shopId, setShopId] = useState<string | null>(null)
+  const [shops, setShops] = useState<Shop[]>([])
+
+  return (
+    <ShopContext.Provider value={{ shopId, setShopId, shops, setShops }}>
+      {children}
+    </ShopContext.Provider>
+  )
+}
+
+export const useShop = () => useContext(ShopContext)
+
 // ==================== THEME ====================
 export type Theme = 'dark' | 'light'
 

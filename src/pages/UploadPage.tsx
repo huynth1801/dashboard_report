@@ -1,9 +1,9 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useToast } from '../lib/context'
+import { useToast, useShop } from '../lib/context'
 import { fetchWithAuth } from '../lib/api'
-import { formatDate, formatPeriod } from '../lib/format'
-import { Upload, FileText, CheckCircle, XCircle, AlertTriangle, Clock, RefreshCw } from 'lucide-react'
+import { formatPeriod } from '../lib/format'
+import { Upload, FileText, CheckCircle, XCircle, AlertTriangle, RefreshCw } from 'lucide-react'
 
 interface UploadResult {
   batchId: string
@@ -41,6 +41,7 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
+  const { shopId, shops } = useShop()
   const queryClient = useQueryClient()
 
   const handleUpload = async () => {
@@ -57,10 +58,11 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
       const formData = new FormData()
       formData.append('file', file)
       formData.append('period', period)
+      if (shopId) formData.append('shopId', shopId)
 
-      const response = await fetchWithAuth(`/api/upload/${type}`, { 
-        method: 'POST', 
-        body: formData 
+      const response = await fetchWithAuth(`/api/upload/${type}`, {
+        method: 'POST',
+        body: formData
       })
 
       clearInterval(interval)
@@ -72,8 +74,9 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
       const typedData = data as UploadResult
       setResult(typedData)
       
+      const shopName = shops.find(s => s.id === shopId)?.name
       addToast(
-        `✅ Đã import ${typedData.rowsImported} ${type === 'orders' ? 'đơn hàng' : 'giao dịch'} — ${formatPeriod(typedData.period)}`,
+        `✅ Đã import ${typedData.rowsImported} ${type === 'orders' ? 'đơn hàng' : 'giao dịch'} — ${formatPeriod(typedData.period)}${shopName ? ` (${shopName})` : ''}`,
         'success'
       )
 
@@ -191,6 +194,9 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
             <div className="alert-title">Upload thành công</div>
             <div className="alert-desc">
               {result.rowsImported} {type === 'orders' ? 'đơn hàng' : 'giao dịch'} — kỳ {formatPeriod(result.period)}
+              {shops.find(s => s.id === shopId) && (
+                <> · Shop: <strong>{shops.find(s => s.id === shopId)?.name}</strong></>
+              )}
               {result.errors && result.errors.length > 0 && (
                 <> · <span style={{ color: 'var(--warning)' }}>{result.errors.length} cảnh báo</span></>
               )}
@@ -208,6 +214,17 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
             <div className="alert-title">Lỗi upload</div>
             <div className="alert-desc">{error}</div>
           </div>
+        </div>
+      )}
+
+      {/* Shop indicator */}
+      {!result && (
+        <div style={{ marginBottom: 10, padding: '8px 12px', background: 'var(--bg-base)', borderRadius: 'var(--radius)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-secondary)' }}>
+          <span style={{ color: 'var(--text-muted)' }}>Shop: </span>
+          {shops.find(s => s.id === shopId)
+            ? <strong style={{ color: 'var(--shopee-orange)' }}>{shops.find(s => s.id === shopId)?.name}</strong>
+            : <span style={{ color: 'var(--text-muted)' }}>Chưa chọn shop (dữ liệu chung)</span>
+          }
         </div>
       )}
 
@@ -256,21 +273,109 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
   )
 }
 
+// ======================== Assign Shop Panel ========================
+function AssignShopPanel({ periods }: { periods: string[] }) {
+  const { shops } = useShop()
+  const { addToast } = useToast()
+  const queryClient = useQueryClient()
+  const [selectedPeriod, setSelectedPeriod] = useState('')
+  const [selectedShopId, setSelectedShopId] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  if (shops.length === 0) return null
+
+  const handleAssign = async () => {
+    if (!selectedPeriod || !selectedShopId) return
+    setLoading(true)
+    try {
+      const r = await fetchWithAuth('/api/upload/assign-shop', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period: selectedPeriod, shopId: selectedShopId }),
+      })
+      const data = await r.json()
+      if (!r.ok) throw new Error(data.error || 'Thất bại')
+      const shopName = shops.find(s => s.id === selectedShopId)?.name ?? ''
+      addToast(`✅ Đã gán kỳ ${formatPeriod(selectedPeriod)} → ${shopName} (${data.ordersUpdated} đơn, ${data.transactionsUpdated} giao dịch)`, 'success')
+      queryClient.invalidateQueries()
+    } catch (err: any) {
+      addToast(err.message ?? 'Lỗi gán shop', 'error')
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <span style={{ fontSize: 20 }}>🔗</span>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Gán dữ liệu cũ vào shop</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Dữ liệu upload trước khi có tính năng shop — gán lại vào đúng shop</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 160px' }}>
+          <label className="label">Kỳ dữ liệu</label>
+          <select
+            className="input"
+            value={selectedPeriod}
+            onChange={e => setSelectedPeriod(e.target.value)}
+            style={{ width: '100%' }}
+          >
+            <option value="">-- Chọn kỳ --</option>
+            {periods.map(p => (
+              <option key={p} value={p}>{formatPeriod(p)} ({p})</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ flex: '1 1 160px' }}>
+          <label className="label">Gán vào shop</label>
+          <select
+            className="input"
+            value={selectedShopId}
+            onChange={e => setSelectedShopId(e.target.value)}
+            style={{ width: '100%' }}
+          >
+            <option value="">-- Chọn shop --</option>
+            {shops.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <button
+          className="btn btn-primary"
+          disabled={!selectedPeriod || !selectedShopId || loading}
+          onClick={handleAssign}
+          style={{ flexShrink: 0, height: 38 }}
+        >
+          {loading ? '⏳ Đang gán...' : '🔗 Gán shop'}
+        </button>
+      </div>
+
+      <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+        ⚠️ Thao tác này sẽ gán <strong>toàn bộ</strong> dữ liệu của kỳ đó vào shop được chọn (bao gồm cả dữ liệu đã gán shop khác).
+      </div>
+    </div>
+  )
+}
+
 export function UploadPage() {
-  const { data: historyData, isPending: historyLoading, refetch: fetchHistory } = useQuery<UploadBatch[]>({
+  const { data: historyData, isPending: historyLoading, refetch: fetchHistory } = useQuery<{ periods: string[] }>({
     queryKey: ['settings', 'periods-history'],
     queryFn: async () => {
       const r = await fetchWithAuth('/api/settings/periods')
-      const data = await r.json()
-      const periods: string[] = data.periods ?? []
-      return periods.flatMap((p: string) => [
-        { id: `ord-${p}`, type: 'orders' as const, period: p, rowsImported: 0, createdAt: new Date().toISOString() },
-        { id: `bal-${p}`, type: 'balance' as const, period: p, rowsImported: 0, createdAt: new Date().toISOString() },
-      ])
+      return r.json()
     }
   })
 
-  const history = historyData ?? []
+  const periods = historyData?.periods ?? []
+  const history = periods.flatMap((p: string) => [
+    { id: `ord-${p}`, type: 'orders' as const, period: p, rowsImported: 0, createdAt: new Date().toISOString() },
+    { id: `bal-${p}`, type: 'balance' as const, period: p, rowsImported: 0, createdAt: new Date().toISOString() },
+  ])
 
   return (
     <div>
@@ -291,6 +396,9 @@ export function UploadPage() {
           onSuccess={() => fetchHistory()}
         />
       </div>
+
+      {/* Assign old data to shop */}
+      <AssignShopPanel periods={periods} />
 
       {/* Tips */}
       <div className="alert alert-info" style={{ marginBottom: 24 }}>

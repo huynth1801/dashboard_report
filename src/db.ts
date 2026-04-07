@@ -75,10 +75,11 @@ export async function runMigrations(): Promise<void> {
     );
 
     CREATE TABLE IF NOT EXISTS product_costs (
-      productShort TEXT PRIMARY KEY,
+      productShort TEXT NOT NULL,
       costPrice REAL NOT NULL DEFAULT 0,
       note TEXT,
-      userId TEXT NOT NULL DEFAULT 'public'
+      userId TEXT NOT NULL DEFAULT 'public',
+      PRIMARY KEY (productShort, userId)
     );
 
     CREATE TABLE IF NOT EXISTS upload_batches (

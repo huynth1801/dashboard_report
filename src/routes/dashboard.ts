@@ -30,20 +30,23 @@ router.get("/", async (req: Request, res: Response) => {
     // --- KPIs ---
     const orderStatsRs = await db.execute({
       sql: `SELECT
-          COUNT(DISTINCT orderId) AS totalOrders,
-          SUM(revenue) AS totalRevenue,
-          SUM(unitCount) AS totalUnits,
-          SUM(quantity) AS totalQuantity
-         FROM orders
-         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1`,
+          COUNT(DISTINCT o.orderId) AS totalOrders,
+          SUM(o.revenue) AS totalRevenue,
+          SUM(o.unitCount) AS totalUnits,
+          SUM(o.quantity) AS totalQuantity,
+          SUM(o.unitCount * IFNULL(c.costPrice, 0)) AS totalCost
+         FROM orders o
+         LEFT JOIN settings_costs c ON o.productShort = c.productShort AND o.userId = c.userId
+         WHERE o.period IN (${placeholders}) AND o.userId = ? AND o.isCompleted = 1`,
       args: [...periods, userId],
     });
-    
+
     const orderStatsRow = orderStatsRs.rows[0] as unknown as {
       totalOrders: number;
       totalRevenue: number | null;
       totalUnits: number | null;
       totalQuantity: number | null;
+      totalCost: number | null;
     };
 
     const orderStats = {
@@ -51,6 +54,7 @@ router.get("/", async (req: Request, res: Response) => {
       totalRevenue: Number(orderStatsRow?.totalRevenue ?? 0),
       totalUnits: Number(orderStatsRow?.totalUnits ?? 0),
       totalQuantity: Number(orderStatsRow?.totalQuantity ?? 0),
+      totalCost: Number(orderStatsRow?.totalCost ?? 0),
     };
 
     const avgOrderValue =
@@ -69,7 +73,7 @@ router.get("/", async (req: Request, res: Response) => {
          WHERE period IN (${placeholders}) AND userId = ?`,
       args: [...periods, userId],
     });
-    
+
     const txRow = txStatsRs.rows[0] as unknown as {
       totalFees: number | null;
       shippingAdj: number | null;
@@ -92,6 +96,8 @@ router.get("/", async (req: Request, res: Response) => {
     const totalRefunds = Math.abs(txStats.totalRefunds);
     const totalVouchers = Math.abs(txStats.totalVouchers);
     const netRevenue = totalRevenue - totalFees - shippingAdj;
+    const totalCost = orderStats.totalCost;
+    const netProfit = netRevenue - totalCost;
 
     // Days in period
     let totalDays = 0;
@@ -113,6 +119,8 @@ router.get("/", async (req: Request, res: Response) => {
       totalRefunds,
       totalVouchers,
       avgDailyRevenue,
+      totalCost,
+      netProfit,
     };
 
     // --- Daily series ---
@@ -143,7 +151,9 @@ router.get("/", async (req: Request, res: Response) => {
       { label: "Doanh thu đơn hàng", value: totalRevenue, type: "income" },
       { label: "Phí QC/Shopee", value: -totalFees, type: "expense" },
       { label: "Đ/c phí ship", value: -shippingAdj, type: "expense" },
-      { label: "DOANH THU RÒNG", value: netRevenue, type: "total" },
+      { label: "Doanh thu ròng", value: netRevenue, type: "total" },
+      { label: "Giá vốn hàng bán", value: -totalCost, type: "expense" },
+      { label: "LỢI NHUẬN THỰC", value: netProfit, type: "total" },
     ];
 
     // Previous period revenue for comparison

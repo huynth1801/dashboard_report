@@ -1,8 +1,9 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react'
+import React, { useState, useRef, useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../lib/context'
 import { fetchWithAuth } from '../lib/api'
 import { formatDate, formatPeriod } from '../lib/format'
-import { Upload, FileText, CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react'
+import { Upload, FileText, CheckCircle, XCircle, AlertTriangle, Clock, RefreshCw } from 'lucide-react'
 
 interface UploadResult {
   batchId: string
@@ -35,12 +36,59 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   })
-  const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [result, setResult] = useState<UploadResult | null>(null)
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
+  const queryClient = useQueryClient()
+
+  const handleUpload = async () => {
+    if (!file || !period) return
+    setUploading(true)
+    setError(null)
+    setProgress(0)
+
+    const interval = setInterval(() => {
+      setProgress(p => Math.min(p + 15, 85))
+    }, 200)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('period', period)
+
+      const response = await fetchWithAuth(`/api/upload/${type}`, { 
+        method: 'POST', 
+        body: formData 
+      })
+
+      clearInterval(interval)
+      setProgress(100)
+
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Upload thất bại')
+      
+      const typedData = data as UploadResult
+      setResult(typedData)
+      
+      addToast(
+        `✅ Đã import ${typedData.rowsImported} ${type === 'orders' ? 'đơn hàng' : 'giao dịch'} — ${formatPeriod(typedData.period)}`,
+        'success'
+      )
+
+      // Invalidate ALL data queries
+      queryClient.invalidateQueries()
+    } catch (err: any) {
+      clearInterval(interval)
+      setError(err.message ?? 'Upload thất bại')
+      setProgress(0)
+      addToast(err.message ?? 'Upload thất bại', 'error')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   // Update period format when mode changes
   const switchMode = (newMode: 'month' | 'day') => {
@@ -54,11 +102,11 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
 
   const validateFile = (f: File) => {
     if (!f.name.match(/\.(xlsx|xls)$/i)) {
-      setError('Chỉ chấp nhận file .xlsx hoặc .xls')
+      addToast('Chỉ chấp nhận file .xlsx hoặc .xls', 'error')
       return false
     }
     if (f.size > 10 * 1024 * 1024) {
-      setError('File tối đa 10MB')
+      addToast('File tối đa 10MB', 'error')
       return false
     }
     return true
@@ -76,57 +124,6 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
     setDragOver(false)
     const f = e.dataTransfer.files[0]
     if (f) handleFile(f)
-  }
-
-  const handleUpload = async () => {
-    if (!file || !period) return
-    setUploading(true)
-    setProgress(0)
-    setError(null)
-
-    // Simulate progress
-    const interval = setInterval(() => {
-      setProgress(p => Math.min(p + 15, 85))
-    }, 200)
-
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('period', period)
-
-      const response = await fetchWithAuth(`/api/upload/${type}`, { method: 'POST', body: formData })
-      clearInterval(interval)
-      setProgress(100)
-
-      let data: any
-      const contentType = response.headers.get('content-type') ?? ''
-      if (contentType.includes('application/json')) {
-        data = await response.json()
-      } else {
-        const text = await response.text()
-        data = { error: text || 'Upload thất bại' }
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error ?? 'Upload thất bại')
-      }
-
-      const typedData = data as UploadResult
-
-      setResult(typedData)
-      onSuccess(typedData)
-      addToast(
-        `✅ Đã import ${typedData.rowsImported} ${type === 'orders' ? 'đơn hàng' : 'giao dịch'} — ${formatPeriod(typedData.period)}`,
-        'success'
-      )
-    } catch (err: any) {
-      clearInterval(interval)
-      setProgress(0)
-      setError(err.message ?? 'Upload thất bại')
-      addToast(err.message ?? 'Upload thất bại', 'error')
-    } finally {
-      setUploading(false)
-    }
   }
 
   const reset = () => {
@@ -290,34 +287,20 @@ function FileDropzone({ type, label, description, icon, onSuccess }: DropzonePro
 }
 
 export function UploadPage() {
-  const [history, setHistory] = useState<UploadBatch[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
-
-  // Fetch upload history (using periods as proxy since no dedicated endpoint)
-  const fetchHistory = useCallback(async () => {
-    setHistoryLoading(true)
-    try {
-      // We'll infer from periods
+  const { data: historyData, isPending: historyLoading, refetch: fetchHistory } = useQuery<UploadBatch[]>({
+    queryKey: ['settings', 'periods-history'],
+    queryFn: async () => {
       const r = await fetchWithAuth('/api/settings/periods')
-      const d = await r.json()
-      // Build mock history entries from periods
-      const periods: string[] = d.periods ?? []
-      const fakeHistory: UploadBatch[] = periods.flatMap(p => [
+      const data = await r.json()
+      const periods: string[] = data.periods ?? []
+      return periods.flatMap((p: string) => [
         { id: `ord-${p}`, type: 'orders' as const, period: p, rowsImported: 0, createdAt: new Date().toISOString() },
         { id: `bal-${p}`, type: 'balance' as const, period: p, rowsImported: 0, createdAt: new Date().toISOString() },
       ])
-      setHistory(fakeHistory)
-    } catch {
-    } finally {
-      setHistoryLoading(false)
     }
-  }, [])
+  })
 
-  useEffect(() => { fetchHistory() }, [fetchHistory])
-
-  const handleSuccess = () => {
-    fetchHistory()
-  }
+  const history = historyData ?? []
 
   return (
     <div>
@@ -328,14 +311,14 @@ export function UploadPage() {
           label="Báo cáo Đơn hàng"
           description="File xuất từ Shopee Seller → Đơn hàng → Tất cả đơn"
           icon="📦"
-          onSuccess={handleSuccess}
+          onSuccess={() => fetchHistory()}
         />
         <FileDropzone
           type="balance"
           label="Báo cáo Số dư"
           description="File xuất từ Shopee Seller → Tài chính → Số dư (header ở dòng 18)"
           icon="💰"
-          onSuccess={handleSuccess}
+          onSuccess={() => fetchHistory()}
         />
       </div>
 

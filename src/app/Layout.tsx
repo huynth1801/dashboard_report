@@ -1,6 +1,7 @@
 import React from 'react'
 import { Sidebar } from '../components/layout/Sidebar'
 import { PeriodSelector } from '../components/layout/PeriodSelector'
+import { ShopSelector } from '../components/layout/ShopSelector'
 import { Outlet, useLocation } from 'react-router-dom'
 import { ThemeToggle } from '../components/layout/ThemeToggle'
 
@@ -13,11 +14,13 @@ const PAGE_TITLES: Record<string, string> = {
 }
 
 const PAGES_WITH_PERIOD = ['/dashboard', '/products', '/finance']
+const PAGES_WITH_SHOP = ['/dashboard', '/products', '/finance', '/upload']
 
 export function Layout() {
   const location = useLocation()
   const title = PAGE_TITLES[location.pathname] ?? 'Dashboard'
   const showPeriod = PAGES_WITH_PERIOD.includes(location.pathname)
+  const showShop = PAGES_WITH_SHOP.includes(location.pathname)
 
   return (
     <div className="layout">
@@ -29,6 +32,7 @@ export function Layout() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <ThemeToggle />
+            {showShop && <ShopSelector />}
             {showPeriod && <PeriodSelector />}
           </div>
         </header>

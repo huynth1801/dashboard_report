@@ -69,14 +69,28 @@ router.get("/periods", async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
+    const shopId = String(req.query.shopId ?? "").trim() || null;
     const db = getDb();
-    const rs = await db.execute({
-      sql: `SELECT DISTINCT period FROM orders WHERE userId = ?
-         UNION
-         SELECT DISTINCT period FROM transactions WHERE userId = ?
-         ORDER BY period DESC`,
-      args: [userId, userId]
-    });
+
+    let rs;
+    if (shopId) {
+      rs = await db.execute({
+        sql: `SELECT DISTINCT period FROM orders WHERE userId = ? AND shopId = ?
+           UNION
+           SELECT DISTINCT period FROM transactions WHERE userId = ? AND shopId = ?
+           ORDER BY period DESC`,
+        args: [userId, shopId, userId, shopId]
+      });
+    } else {
+      rs = await db.execute({
+        sql: `SELECT DISTINCT period FROM orders WHERE userId = ?
+           UNION
+           SELECT DISTINCT period FROM transactions WHERE userId = ?
+           ORDER BY period DESC`,
+        args: [userId, userId]
+      });
+    }
+
     const periods = rs.rows.map((p: any) => String(p.period));
     res.json({ periods });
   } catch (err) {

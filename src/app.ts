@@ -7,6 +7,7 @@ import dashboardRouter from "./routes/dashboard.js";
 import productsRouter from "./routes/products.js";
 import financeRouter from "./routes/finance.js";
 import settingsRouter from "./routes/settings.js";
+import shopsRouter from "./routes/shops.js";
 import { requireAuth } from "./middleware/auth.js";
 
 export function createApp() {
@@ -23,6 +24,7 @@ export function createApp() {
   app.use("/api/products", requireAuth, productsRouter);
   app.use("/api/finance", requireAuth, financeRouter);
   app.use("/api/settings", requireAuth, settingsRouter);
+  app.use("/api/shops", requireAuth, shopsRouter);
 
   // Health check
   app.get("/api/health", (_req, res) => {

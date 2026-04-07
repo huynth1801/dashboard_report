@@ -1,25 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { usePeriod } from '../../lib/context'
+import { usePeriod, useShop } from '../../lib/context'
 import { fetchWithAuth } from '../../lib/api'
 import { formatPeriod } from '../../lib/format'
 import { ChevronDown, Calendar, CheckSquare, Square } from 'lucide-react'
 
 export function PeriodSelector() {
   const { period, setPeriod, periods, setPeriods } = usePeriod()
+  const { shopId } = useShop()
   const [open, setOpen] = useState(false)
   const [localSelected, setLocalSelected] = useState<string[]>([])
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    fetchWithAuth('/api/settings/periods')
+    const url = shopId ? `/api/settings/periods?shopId=${shopId}` : '/api/settings/periods'
+    fetchWithAuth(url)
       .then(r => r.json())
       .then(data => {
         const list: string[] = data.periods ?? []
         setPeriods(list)
-        if (!period && list.length > 0) setPeriod(list[0])
+        if (list.length > 0) setPeriod(list[0])
+        else setPeriod('')
       })
       .catch(() => {})
-  }, [])
+  }, [shopId])
 
   useEffect(() => {
     if (period) {

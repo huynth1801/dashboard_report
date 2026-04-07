@@ -1,7 +1,7 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Layout } from './Layout'
-import { ToastProvider, PeriodProvider, ThemeProvider } from '../lib/context'
+import { ToastProvider, PeriodProvider, ThemeProvider, ShopProvider } from '../lib/context'
 import { AuthProvider, useAuth } from '../lib/AuthContext'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { DashboardPage } from '../pages/DashboardPage'
@@ -43,6 +43,7 @@ export default function App() {
       <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
         <AuthProvider>
           <ThemeProvider>
+            <ShopProvider>
             <PeriodProvider>
               <ToastProvider>
                 <BrowserRouter>
@@ -60,6 +61,7 @@ export default function App() {
                 </BrowserRouter>
               </ToastProvider>
             </PeriodProvider>
+            </ShopProvider>
           </ThemeProvider>
         </AuthProvider>
       </GoogleOAuthProvider>

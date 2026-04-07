@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { usePeriod } from '../lib/context'
+import { usePeriod, useShop } from '../lib/context'
 import { fetchWithAuth } from '../lib/api'
 import { formatCurrency, formatNumber, formatPercent, calcChange, formatShort } from '../lib/format'
 import {
@@ -197,11 +197,15 @@ function WaterfallChart({ data }: { data: DashboardData['waterfall'] }) {
 // ======================== Dashboard Page ========================
 export function DashboardPage() {
   const { period } = usePeriod()
+  const { shopId, shops } = useShop()
+
+  const shopQuery = shopId ? `&shopId=${shopId}` : ''
+  const currentShopName = shops.find(s => s.id === shopId)?.name ?? null
 
   const { data, isPending, error, refetch } = useQuery<DashboardData>({
-    queryKey: ['dashboard', period],
+    queryKey: ['dashboard', period, shopId],
     queryFn: async () => {
-      const r = await fetchWithAuth(`/api/dashboard?period=${period}`)
+      const r = await fetchWithAuth(`/api/dashboard?period=${period}${shopQuery}`)
       const d = await r.json()
       if (d.error) throw new Error(d.error)
       return d
@@ -314,6 +318,18 @@ export function DashboardPage() {
 
   return (
     <div>
+      {/* Shop badge */}
+      {currentShopName && (
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="badge badge-orange" style={{ fontSize: 12, padding: '4px 10px' }}>
+            🏪 {currentShopName}
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            Báo cáo riêng cho shop này
+          </span>
+        </div>
+      )}
+
       {/* KPI Grid */}
       <div className="kpi-grid">
         {kpiCards.map((card, i) => (

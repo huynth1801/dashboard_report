@@ -12,7 +12,7 @@ router.get("/", async (req: Request, res: Response) => {
       return;
     }
 
-    const periodParam = String(req.query.period ?? "").trim();
+    const periodParam = String(req.query.period ?? "").trim().replace(/\//g, "-");
     const sortBy = String(req.query.sortBy ?? "units").trim();
     const limit = Math.min(parseInt(String(req.query.limit ?? "20"), 10) || 20, 100);
 
@@ -21,9 +21,9 @@ router.get("/", async (req: Request, res: Response) => {
       return;
     }
 
-    const periods = periodParam.split(",").map(p => p.trim()).filter(p => /^\d{4}-\d{2}$/.test(p));
+    const periods = periodParam.split(",").map(p => p.trim()).filter(p => /^\d{4}-\d{2}(-\d{2})?$/.test(p));
     if (periods.length === 0) {
-      res.status(400).json({ error: "period query param required (YYYY-MM)" });
+      res.status(400).json({ error: "period query param required (YYYY-MM or YYYY-MM-DD)" });
       return;
     }
 
@@ -106,13 +106,13 @@ router.get("/summary", async (req: Request, res: Response) => {
       return;
     }
 
-    const periodsParam = String(req.query.periods ?? "").trim();
+    const periodsParam = String(req.query.periods ?? "").trim().replace(/\//g, "-");
     if (!periodsParam) {
-      res.status(400).json({ error: "periods query param required (comma-separated YYYY-MM)" });
+      res.status(400).json({ error: "periods query param required (comma-separated YYYY-MM or YYYY-MM-DD)" });
       return;
     }
 
-    const periods = periodsParam.split(",").map((p) => p.trim()).filter((p) => /^\d{4}-\d{2}$/.test(p));
+    const periods = periodsParam.split(",").map((p) => p.trim()).filter((p) => /^\d{4}-\d{2}(-\d{2})?$/.test(p));
     if (periods.length === 0) {
       res.status(400).json({ error: "No valid periods provided" });
       return;

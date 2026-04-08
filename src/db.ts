@@ -132,4 +132,32 @@ export async function runMigrations(): Promise<void> {
   await database.execute(`CREATE INDEX IF NOT EXISTS idx_transactions_userId ON transactions(userId);`);
   await database.execute(`CREATE INDEX IF NOT EXISTS idx_orders_shopId ON orders(shopId);`);
   await database.execute(`CREATE INDEX IF NOT EXISTS idx_transactions_shopId ON transactions(shopId);`);
+
+  // Migrate product_costs: add shopId to primary key (one-time migration)
+  // Check if shopId column already exists in product_costs
+  try {
+    const colInfo = await database.execute(`PRAGMA table_info(product_costs)`);
+    const hasShopId = colInfo.rows.some((r: any) => String(r.name) === 'shopId');
+    if (!hasShopId) {
+      // Recreate table with shopId in PK, migrate existing data as shopId = '' (general/all shops)
+      await database.execute(`
+        CREATE TABLE IF NOT EXISTS product_costs_v2 (
+          productShort TEXT NOT NULL,
+          costPrice REAL NOT NULL DEFAULT 0,
+          note TEXT,
+          userId TEXT NOT NULL DEFAULT 'public',
+          shopId TEXT NOT NULL DEFAULT '',
+          PRIMARY KEY (productShort, userId, shopId)
+        )
+      `);
+      await database.execute(`
+        INSERT OR IGNORE INTO product_costs_v2 (productShort, costPrice, note, userId, shopId)
+        SELECT productShort, costPrice, note, userId, '' FROM product_costs
+      `);
+      await database.execute(`DROP TABLE IF EXISTS product_costs`);
+      await database.execute(`ALTER TABLE product_costs_v2 RENAME TO product_costs`);
+    }
+  } catch (err: any) {
+    console.warn('product_costs migration skipped:', err?.message);
+  }
 }

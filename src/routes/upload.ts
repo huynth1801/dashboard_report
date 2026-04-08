@@ -222,11 +222,11 @@ router.patch("/assign-shop", async (req: Request, res: Response) => {
 
     const [ordersRs, txRs] = await Promise.all([
       db.execute({
-        sql: `UPDATE orders SET shopId = ? WHERE period = ? AND userId = ?`,
+        sql: `UPDATE orders SET shopId = ? WHERE period = ? AND userId = ? AND (shopId IS NULL OR shopId = '')`,
         args: [shopId.trim(), period, userId],
       }),
       db.execute({
-        sql: `UPDATE transactions SET shopId = ? WHERE period = ? AND userId = ?`,
+        sql: `UPDATE transactions SET shopId = ? WHERE period = ? AND userId = ? AND (shopId IS NULL OR shopId = '')`,
         args: [shopId.trim(), period, userId],
       }),
     ]);

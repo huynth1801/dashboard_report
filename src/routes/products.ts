@@ -35,8 +35,12 @@ router.get("/", async (req: Request, res: Response) => {
     };
     const sortField = validSortFields[sortBy] ?? "totalUnits";
 
+    const shopId = String(req.query.shopId ?? "").trim() || null;
+
     const db = getDb();
     const placeholders = periods.map(() => "?").join(",");
+    const shopFilter = shopId ? " AND shopId = ?" : "";
+    const shopArgs = shopId ? [shopId] : [];
 
     // Group by productShort — include both unitCount and raw quantity
     const rs = await db.execute({
@@ -47,11 +51,11 @@ router.get("/", async (req: Request, res: Response) => {
           SUM(revenue) AS totalRevenue,
           COUNT(DISTINCT orderId) AS totalOrders
          FROM orders
-         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1
+         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1${shopFilter}
          GROUP BY productShort
          ORDER BY ${sortField} DESC
          LIMIT ?`,
-      args: [...periods, userId, limit]
+      args: [...periods, userId, ...shopArgs, limit]
     });
 
     const products = rs.rows.map((row: any) => ({
@@ -74,10 +78,10 @@ router.get("/", async (req: Request, res: Response) => {
             SUM(revenue) AS revenue,
             COUNT(DISTINCT orderId) AS orders
            FROM orders
-           WHERE period IN (${placeholders}) AND productShort = ? AND userId = ? AND isCompleted = 1
+           WHERE period IN (${placeholders}) AND productShort = ? AND userId = ? AND isCompleted = 1${shopFilter}
            GROUP BY variant, productName
            ORDER BY units DESC`,
-        args: [...periods, product.productShort, userId]
+        args: [...periods, product.productShort, userId, ...shopArgs]
       });
 
       product.variants = vRs.rows.map((r: any) => ({
@@ -118,8 +122,12 @@ router.get("/summary", async (req: Request, res: Response) => {
       return;
     }
 
+    const shopId = String(req.query.shopId ?? "").trim() || null;
+
     const db = getDb();
     const placeholders = periods.map(() => "?").join(",");
+    const shopFilter = shopId ? " AND shopId = ?" : "";
+    const shopArgs = shopId ? [shopId] : [];
 
     // Get all products across all selected periods
     const allProductsRs = await db.execute({
@@ -131,10 +139,10 @@ router.get("/summary", async (req: Request, res: Response) => {
           SUM(revenue) AS revenue,
           COUNT(DISTINCT orderId) AS orders
          FROM orders
-         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1
+         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1${shopFilter}
          GROUP BY productShort, period
          ORDER BY productShort, period`,
-      args: [...periods, userId]
+      args: [...periods, userId, ...shopArgs]
     });
 
     const allProducts = allProductsRs.rows.map((r: any) => ({
@@ -155,10 +163,10 @@ router.get("/summary", async (req: Request, res: Response) => {
           SUM(revenue) AS totalRevenue,
           COUNT(DISTINCT orderId) AS totalOrders
          FROM orders
-         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1
+         WHERE period IN (${placeholders}) AND userId = ? AND isCompleted = 1${shopFilter}
          GROUP BY period
          ORDER BY period`,
-      args: [...periods, userId]
+      args: [...periods, userId, ...shopArgs]
     });
 
     const periodTotals = periodTotalsRs.rows.map((r: any) => ({

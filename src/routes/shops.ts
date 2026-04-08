@@ -83,6 +83,28 @@ router.patch("/:id", async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /api/shops/:id/unlink — bỏ gán shopId khỏi orders/transactions (giữ nguyên shop)
+router.patch("/:id/unlink", async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+    const { id } = req.params;
+    const db = getDb();
+
+    const [ordersRs, txRs] = await Promise.all([
+      db.execute({ sql: `UPDATE orders SET shopId = NULL WHERE shopId = ? AND userId = ?`, args: [id, userId] }),
+      db.execute({ sql: `UPDATE transactions SET shopId = NULL WHERE shopId = ? AND userId = ?`, args: [id, userId] }),
+    ]);
+    await db.execute({ sql: `UPDATE upload_batches SET shopId = NULL WHERE shopId = ? AND userId = ?`, args: [id, userId] });
+
+    res.json({ success: true, ordersUnlinked: ordersRs.rowsAffected, transactionsUnlinked: txRs.rowsAffected });
+  } catch (err) {
+    console.error("Shops error:", err);
+    res.status(500).json({ error: "Failed to unlink shop" });
+  }
+});
+
 // DELETE /api/shops/:id
 router.delete("/:id", async (req: Request, res: Response) => {
   try {

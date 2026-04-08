@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { usePeriod } from '../lib/context'
+import { usePeriod, useShop } from '../lib/context'
 import { fetchWithAuth } from '../lib/api'
 import { formatCurrency, formatNumber, formatPeriod } from '../lib/format'
 import { ChevronDown, ChevronRight, AlertTriangle, BarChart3, Table2 } from 'lucide-react'
@@ -66,24 +66,28 @@ function MonthlyView({
   sortBy: SortBy
   setSortBy: (s: SortBy) => void
 }) {
+  const { shopId } = useShop()
+  const shopQuery = shopId ? `&shopId=${shopId}` : ''
+
   const { data: costsData } = useQuery({
-    queryKey: ['settings', 'costs'],
+    queryKey: ['settings', 'costs', shopId],
     queryFn: async () => {
-      const r = await fetchWithAuth('/api/settings/costs')
-      return r.json()
+      // Lấy đúng giá vốn của shop đang xem (không fallback cross-shop)
+      const sid = shopId ?? ''
+      const r = await fetchWithAuth(`/api/settings/costs?shopId=${encodeURIComponent(sid)}`)
+      const d = await r.json()
+      const map: Record<string, number> = {}
+      for (const c of d?.costs ?? []) map[c.productShort] = c.costPrice
+      return map
     },
   })
 
-  const costs = useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const c of costsData?.costs ?? []) map[c.productShort] = c.costPrice
-    return map
-  }, [costsData])
+  const costs = costsData ?? {}
 
   const { data, isPending: loading } = useQuery<ProductsData>({
-    queryKey: ['products', period, sortBy],
+    queryKey: ['products', period, sortBy, shopId],
     queryFn: async () => {
-      const r = await fetchWithAuth(`/api/products?period=${period}&sortBy=${sortBy}&limit=50`)
+      const r = await fetchWithAuth(`/api/products?period=${period}&sortBy=${sortBy}&limit=50${shopQuery}`)
       return r.json()
     },
     enabled: !!period,
@@ -255,13 +259,15 @@ function MonthlyView({
 
 // ======================== Summary View (Multi-month) ========================
 function SummaryView({ periods: allPeriods }: { periods: string[] }) {
-  const [selectedPeriods, setSelectedPeriods] = useState<string[]>(() => 
+  const { shopId } = useShop()
+  const [selectedPeriods, setSelectedPeriods] = useState<string[]>(() =>
     allPeriods.slice(0, Math.min(3, allPeriods.length))
   )
+  const shopQuery = shopId ? `&shopId=${shopId}` : ''
   const { data, isPending: loading } = useQuery<SummaryData>({
-    queryKey: ['products', 'summary', selectedPeriods.join(',')],
+    queryKey: ['products', 'summary', selectedPeriods.join(','), shopId],
     queryFn: async () => {
-      const r = await fetchWithAuth(`/api/products/summary?periods=${selectedPeriods.join(',')}`)
+      const r = await fetchWithAuth(`/api/products/summary?periods=${selectedPeriods.join(',')}${shopQuery}`)
       return r.json()
     },
     enabled: selectedPeriods.length > 0,

@@ -34,18 +34,42 @@ router.get("/", async (req: Request, res: Response) => {
     const txShopArgs = shopId ? [shopId] : [];
 
     // --- KPIs ---
-    const orderStatsRs = await db.execute({
-      sql: `SELECT
-          COUNT(DISTINCT o.orderId) AS totalOrders,
-          SUM(o.revenue) AS totalRevenue,
-          SUM(o.unitCount) AS totalUnits,
-          SUM(o.quantity) AS totalQuantity,
-          SUM(o.unitCount * IFNULL(c.costPrice, 0)) AS totalCost
-         FROM orders o
-         LEFT JOIN product_costs c ON o.productShort = c.productShort AND o.userId = c.userId
-         WHERE o.period IN (${placeholders}) AND o.userId = ? AND o.isCompleted = 1${shopFilter}`,
-      args: [...periods, userId, ...shopArgs],
-    });
+    // Cost lookup logic:
+    //   - Khi xem shop cụ thể: chỉ dùng giá vốn của ĐÚNG shop đó (không fallback sang giá chung)
+    //   - Khi xem "tất cả shop": dùng giá vốn theo shopId của từng đơn, fallback về giá chung (shopId='')
+    let orderStatsRs;
+    if (shopId) {
+      // Shop-specific: JOIN trực tiếp với giá vốn của shop đó, không fallback
+      orderStatsRs = await db.execute({
+        sql: `SELECT
+            COUNT(DISTINCT o.orderId) AS totalOrders,
+            SUM(o.revenue) AS totalRevenue,
+            SUM(o.unitCount) AS totalUnits,
+            SUM(o.quantity) AS totalQuantity,
+            SUM(o.unitCount * COALESCE(c.costPrice, 0)) AS totalCost
+           FROM orders o
+           LEFT JOIN product_costs c
+             ON c.productShort = o.productShort AND c.userId = o.userId AND c.shopId = ?
+           WHERE o.period IN (${placeholders}) AND o.userId = ? AND o.isCompleted = 1 AND o.shopId = ?`,
+        args: [shopId, ...periods, userId, shopId],
+      });
+    } else {
+      // All shops: mỗi đơn hàng dùng đúng giá vốn của shop mình (match theo o.shopId)
+      // Đơn không có shop (shopId NULL) → dùng shopId = '' (dữ liệu cũ chưa gán shop)
+      orderStatsRs = await db.execute({
+        sql: `SELECT
+            COUNT(DISTINCT o.orderId) AS totalOrders,
+            SUM(o.revenue) AS totalRevenue,
+            SUM(o.unitCount) AS totalUnits,
+            SUM(o.quantity) AS totalQuantity,
+            SUM(o.unitCount * COALESCE(c.costPrice, 0)) AS totalCost
+           FROM orders o
+           LEFT JOIN product_costs c
+             ON c.productShort = o.productShort AND c.userId = o.userId AND c.shopId = COALESCE(o.shopId, '')
+           WHERE o.period IN (${placeholders}) AND o.userId = ? AND o.isCompleted = 1`,
+        args: [...periods, userId],
+      });
+    }
 
     const orderStatsRow = orderStatsRs.rows[0] as unknown as {
       totalOrders: number;

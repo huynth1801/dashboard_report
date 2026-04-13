@@ -93,7 +93,7 @@ function resolveColumns(headers: string[]): ColIndexes {
   };
 }
 
-export function parseOrderFile(buffer: Buffer): {
+export function parseOrderFile(buffer: Buffer, overridePeriod?: string): {
   orders: ParsedOrder[];
   errors: ParseError[];
   period: string;
@@ -108,7 +108,7 @@ export function parseOrderFile(buffer: Buffer): {
 
   const orders: ParsedOrder[] = [];
   const errors: ParseError[] = [];
-  let period = "";
+  let period = overridePeriod || "";
 
   if (rows.length < 2) {
     errors.push({ row: 0, message: "File is empty or has no data rows" });
@@ -189,7 +189,7 @@ export function parseOrderFile(buffer: Buffer): {
       quantity,
       unitCount,
       revenue,
-      period: detectedPeriod || period,
+      period: overridePeriod || detectedPeriod || period,
     });
   }
 

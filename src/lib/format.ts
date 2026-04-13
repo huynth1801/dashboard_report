@@ -43,18 +43,30 @@ export const formatDate = (dateStr: string): string => {
   }
 }
 
-// Format period YYYY-MM → "Tháng M/YYYY" or "T1/26, T2/26"
+// Format period YYYY-MM or YYYY-MM-DD → "Tháng M/YYYY" or "DD/MM/YY"
 export const formatPeriod = (period: string): string => {
   if (!period) return ''
   const periods = period.split(',').map(p => p.trim()).filter(Boolean)
-  if (periods.length === 1) {
-    const [y, m] = periods[0].split('-')
-    return `T${parseInt(m)}/${y}`
+  
+  const formatSingle = (p: string) => {
+    const parts = p.split('-')
+    if (parts.length === 3) {
+      // YYYY-MM-DD
+      const [y, m, d] = parts
+      return `${d}/${m}/${y.slice(2)}`
+    } else if (parts.length === 2) {
+      // YYYY-MM
+      const [y, m] = parts
+      return `T${parseInt(m)}/${y}`
+    }
+    return p
   }
-  return periods.map(p => {
-    const [y, m] = p.split('-')
-    return `T${parseInt(m)}/${y.slice(2)}`
-  }).join(', ')
+
+  if (periods.length === 1) {
+    return formatSingle(periods[0])
+  }
+
+  return periods.map(formatSingle).join(', ')
 }
 
 // Rút gọn số tiền: 50,892,890 → 50.9M

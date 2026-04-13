@@ -12,15 +12,15 @@ router.get("/", async (req: Request, res: Response) => {
       return;
     }
 
-    const periodParam = String(req.query.period ?? "").trim();
+    const periodParam = String(req.query.period ?? "").trim().replace(/\//g, "-");
     if (!periodParam) {
       res.status(400).json({ error: "period query param required" });
       return;
     }
 
-    const periods = periodParam.split(",").map(p => p.trim()).filter(p => /^\d{4}-\d{2}$/.test(p));
+    const periods = periodParam.split(",").map(p => p.trim()).filter(p => /^\d{4}-\d{2}(-\d{2})?$/.test(p));
     if (periods.length === 0) {
-      res.status(400).json({ error: "period query param required (YYYY-MM)" });
+      res.status(400).json({ error: "period query param required (YYYY-MM or YYYY-MM-DD)" });
       return;
     }
 

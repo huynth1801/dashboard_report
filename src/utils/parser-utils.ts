@@ -11,13 +11,21 @@ export function isCompletedOrder(status: string): boolean {
   const normalized = status.trim().toLowerCase();
   const completedStatuses = [
     "đã giao hàng",
+    "đã giao",
     "hoàn thành",
     "complete",
     "completed",
     "delivered",
     "đơn hàng đã hoàn thành",
   ];
-  return completedStatuses.includes(normalized);
+  
+  if (completedStatuses.includes(normalized)) return true;
+  
+  // Handle longer statuses common in Shopee exports
+  if (normalized.includes("đã nhận được hàng")) return true;
+  if (normalized.includes("người mua xác nhận")) return true;
+
+  return false;
 }
 
 /**
